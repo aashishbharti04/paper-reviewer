@@ -282,7 +282,16 @@ def review_paper(
     user_prompt = build_user_prompt(paper_text, title_hint, page_count=page_count, sections=sections)
     # Rebuild the system prompt each call so live rule edits take effect immediately.
     provider_name, raw = manager.call(build_system_prompt(), user_prompt, json_mode=True)
-    review, opinion = _parse_json(raw)
+    try:
+        review, opinion = _parse_json(raw)
+    except ValueError:
+        # Last-resort safety net: never hard-fail a paper into an "Error" card.
+        # Surface the model's text for the human reviewer and route it to the
+        # 'needs a look' bucket so it still lands in the queue with a decision.
+        review = _strip_fences(raw).strip() or "(model returned no usable text)"
+        review = ("[Auto: model did not return a clean JSON decision - please "
+                  "review the text below and set the opinion manually.]\n" + review)
+        opinion = "May be springer"
     opinion = _normalize_opinion(opinion)
     review = review.strip()
 

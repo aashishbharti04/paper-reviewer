@@ -160,7 +160,7 @@ class OllamaProvider(Provider):
 class OpenRouterProvider(Provider):
     name: str = "openrouter"
     api_keys: list[str] = field(default_factory=list)
-    model: str = "meta-llama/llama-3.1-70b-instruct:free"
+    model: str = "meta-llama/llama-3.3-70b-instruct:free"
     _key_cycle: Optional[itertools.cycle] = None
 
     def _next_key(self) -> str:
