@@ -286,6 +286,12 @@ def review_paper(
     opinion = _normalize_opinion(opinion)
     review = review.strip()
 
+    # Make the publisher recommendation explicit in the review text itself, so it
+    # shows in the Excel export / copied rows — not only in the opinion chip.
+    if opinion and "decision:" not in review.lower():
+        verb = "Reject" if opinion.lower() == "reject" else f"Accept, route to {opinion}"
+        review = f"{review}\nDecision: {opinion}. Recommendation: {verb}."
+
     if cache_key:
         _cache_save(cache_key, review, opinion, provider_name)
 
