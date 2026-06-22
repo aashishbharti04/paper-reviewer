@@ -5,6 +5,8 @@ A desktop / web tool for conference paper screening. It ingests submitted papers
 AI-text and plagiarism checks, generates a review, and appends the result to a
 Microsoft CMT–style Excel sheet.
 
+**🌐 Live page:** <https://aashishbharti04.github.io/paper-reviewer/>
+
 There are three ways to run it:
 
 - **Web dashboard** (recommended) — a FastAPI app you open in your browser.
