@@ -1,0 +1,813 @@
+{% extends "base.html" %}
+{% set active = "home" %}
+{% block title %}Dashboard — Paper Reviewer{% endblock %}
+
+{% block content %}
+<div x-data="dashboard()" x-init="init()" class="space-y-8">
+
+  <!-- Hero -->
+  <section class="relative overflow-hidden card p-8 md:p-10">
+    <div class="absolute -top-12 -right-12 w-72 h-72 bg-brand-gradient opacity-20 blur-3xl rounded-full"></div>
+    <div class="relative flex items-start justify-between gap-6 flex-wrap">
+      <div class="max-w-2xl">
+        <div class="inline-flex items-center gap-2 chip chip-neutral mb-3">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          ICCCNet 2026 Review Pipeline
+        </div>
+        <h1 class="text-3xl md:text-4xl font-extrabold tracking-tight">
+          Drop papers in.
+          <span class="bg-clip-text text-transparent bg-brand-gradient">Get reviews out.</span>
+        </h1>
+        <p class="mt-3 text-slate-600 dark:text-slate-400">
+          Drag PDFs or DOCX files, optionally load a CMT metadata export, and the pipeline writes a Springer-quality numbered review and an opinion bucket to your master Excel.
+        </p>
+      </div>
+      <div class="grid grid-cols-2 gap-3 min-w-[320px]">
+        <div class="card p-4">
+          <div class="label">Total reviewed</div>
+          <div class="text-3xl font-bold" x-text="stats.total ?? 0"></div>
+        </div>
+        <div class="card p-4">
+          <div class="label">In queue</div>
+          <div class="text-3xl font-bold" x-text="items.length"></div>
+        </div>
+        <div class="card p-4 col-span-2">
+          <div class="label mb-2">By opinion</div>
+          <!-- Stacked proportion bar -->
+          <div x-show="stats.total" class="h-2.5 w-full rounded-full overflow-hidden flex bg-slate-200/60 dark:bg-white/5 mb-3">
+            <template x-for="[op, n] in Object.entries(stats.byOpinion || {})" :key="op">
+              <div :class="barColor(op)" :style="`width:${(n/Math.max(1,stats.total))*100}%`" :title="`${op}: ${n}`"></div>
+            </template>
+          </div>
+          <!-- Per-opinion rows with mini bars -->
+          <div class="space-y-1.5" x-show="stats.total">
+            <template x-for="[op, n] in sortedOpinions()" :key="op">
+              <div class="flex items-center gap-2 text-xs">
+                <span :class="chipClass(op)" class="min-w-[88px] justify-center" x-text="op"></span>
+                <div class="flex-1 h-1.5 rounded-full bg-slate-200/60 dark:bg-white/5 overflow-hidden">
+                  <div :class="barColor(op)" class="h-full" :style="`width:${(n/Math.max(1,stats.total))*100}%`"></div>
+                </div>
+                <span class="tabular-nums font-semibold w-8 text-right" x-text="n"></span>
+                <span class="tabular-nums text-slate-400 w-10 text-right" x-text="`${Math.round((n/Math.max(1,stats.total))*100)}%`"></span>
+              </div>
+            </template>
+          </div>
+          <span x-show="!stats.total" class="text-xs text-slate-500">— No reviews yet —</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Output Excel + CMT loader -->
+  <section class="grid md:grid-cols-2 gap-6">
+    <div class="card p-6">
+      <div class="flex items-center gap-2 mb-1">
+        <svg class="w-5 h-5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12h8M12 8v8"/></svg>
+        <h3 class="font-semibold">Output Excel</h3>
+        <div class="flex-1"></div>
+        <template x-if="excelStatus.exists">
+          <span class="chip chip-springer" x-text="`${formatSize(excelStatus.size)}`"></span>
+        </template>
+        <template x-if="!excelStatus.exists">
+          <span class="chip chip-neutral">not created yet</span>
+        </template>
+      </div>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">Reviews are appended here, with all 9 CMT columns.</p>
+      <input class="input" type="text" x-model="excelPath" @change="refreshExcelStatus()" placeholder="{{ default_excel }}"/>
+      <div class="mt-3 flex items-center gap-2 flex-wrap">
+        <button class="btn btn-primary" @click="downloadExcel()" :disabled="!excelStatus.exists" title="Save the master Excel to your computer">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Save / Download
+        </button>
+        <button class="btn btn-secondary" @click="openExcelFolder()" title="Show in File Explorer">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          Open folder
+        </button>
+        <button class="btn btn-ghost" @click="refreshExcelStatus()">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="card p-6">
+      <div class="flex items-center gap-2 mb-1">
+        <svg class="w-5 h-5 text-sky-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <h3 class="font-semibold">CMT metadata <span class="text-slate-400 font-normal text-xs">(optional)</span></h3>
+      </div>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">Drop your CMT export (.xlsx or .xls) — author info auto-fills by Paper ID.</p>
+      <div class="flex items-center gap-2">
+        <input class="sr-file" type="file" id="cmt-input" accept=".xlsx,.xls" @change="uploadCmt($event)"/>
+        <label for="cmt-input" class="btn btn-secondary cursor-pointer">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Load CMT file
+        </label>
+        <template x-if="cmtCount">
+          <span class="chip chip-springer">
+            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10"/></svg>
+            <span x-text="`${cmtCount} papers loaded`"></span>
+          </span>
+        </template>
+        <template x-if="!cmtCount">
+          <span class="chip chip-neutral">none</span>
+        </template>
+      </div>
+    </div>
+  </section>
+
+  <!-- Drop zone -->
+  <section
+    class="dropzone p-10 text-center cursor-pointer"
+    :class="{ 'is-over': isOver }"
+    @dragover.prevent="isOver = true"
+    @dragleave.prevent="isOver = false"
+    @drop.prevent="onDrop($event)"
+    @click="$refs.fileInput.click()">
+    <input type="file" class="sr-file" multiple accept=".pdf,.docx" x-ref="fileInput" @change="onFileInput($event)"/>
+    <div class="mx-auto w-16 h-16 grid place-items-center rounded-2xl bg-brand-gradient text-white shadow-glow mb-4">
+      <svg class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    </div>
+    <h3 class="text-lg font-semibold">Drop PDFs and DOCX files here</h3>
+    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">or click to browse · multiple files supported</p>
+  </section>
+
+  <!-- File grid + controls -->
+  <section class="space-y-4" x-show="items.length" x-transition>
+    <div class="flex items-center gap-3 flex-wrap">
+      <h3 class="font-semibold">Papers in queue <span class="text-slate-400 font-normal" x-text="`(${items.length})`"></span></h3>
+      <div class="flex-1"></div>
+      <label class="flex items-center gap-2 text-sm cursor-pointer select-none">
+        <input type="checkbox" x-model="previewEnabled" class="rounded border-slate-400 text-brand-600 focus:ring-brand-500"/>
+        Preview each review before saving
+      </label>
+      <button class="btn btn-ghost" @click="clearReviewCache()" :disabled="running" title="Force fresh LLM call next time (ignore cached decisions)">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+        Clear cache
+      </button>
+      <button class="btn btn-ghost" @click="clearAll()" :disabled="running">Clear queue</button>
+      <button class="btn btn-primary" @click="startJob()" :disabled="running || !items.length">
+        <template x-if="!running">
+          <span class="inline-flex items-center gap-2">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Start review
+          </span>
+        </template>
+        <template x-if="running">
+          <span class="inline-flex items-center gap-2"><span class="spinner"></span> Processing…</span>
+        </template>
+      </button>
+      <button class="btn btn-danger" @click="cancelJob()" x-show="running">Cancel</button>
+    </div>
+
+    <!-- Progress bar -->
+    <div class="w-full h-1.5 rounded-full bg-slate-200/70 dark:bg-white/5 overflow-hidden" x-show="running">
+      <div class="h-full bg-brand-gradient transition-all duration-300" :style="`width: ${progressPct}%`"></div>
+    </div>
+
+    <div class="grid lg:grid-cols-2 gap-3">
+      <template x-for="it in items" :key="it.id">
+        <div class="card p-4 item-row fade-up">
+          <div class="flex items-start gap-3">
+            <div class="w-10 h-10 rounded-lg bg-rose-100 dark:bg-rose-500/15 text-rose-600 dark:text-rose-300 grid place-items-center shrink-0">
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2 flex-wrap">
+                <div class="font-medium truncate max-w-[26ch]" :title="it.filename" x-text="it.filename"></div>
+                <span class="text-xs text-slate-500 dark:text-slate-400" x-text="it.provider ? `via ${it.provider}` : ''"></span>
+              </div>
+              <div class="mt-2 flex items-center gap-2 flex-wrap text-xs">
+                <span class="inline-flex items-center gap-1.5 chip chip-neutral">
+                  <span class="status-dot" :class="`dot-${it.status}`"></span>
+                  <span class="capitalize" x-text="it.status"></span>
+                </span>
+                <template x-if="it.opinion"><span :class="chipClass(it.opinion)" x-text="it.opinion"></span></template>
+                <template x-if="it.ai_score >= 0">
+                  <span :class="plagChipClass(it.ai_score, 'ai')" :title="(it.plag_evidence||[]).join(' · ')" x-text="`AI ${it.ai_score}%`"></span>
+                </template>
+                <template x-if="it.dup_score >= 0">
+                  <span :class="plagChipClass(it.dup_score, 'plag')" :title="(it.plag_evidence||[]).join(' · ')" x-text="`Dup ${it.dup_score}%`"></span>
+                </template>
+                <template x-if="it.plag_flagged">
+                  <span class="chip chip-reject" x-text="`FLAGGED: ${it.plag_flagged === 'ai' ? 'AI' : 'plagiarism'} >= threshold`"></span>
+                </template>
+                <button class="text-xs px-2 py-0.5 rounded-md border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5" @click="runPlagiarism(it, false)" :disabled="running" title="Local plagiarism + AI text check (uses persistent corpus, no web search)">
+                  Check plag
+                </button>
+                <button class="text-xs px-2 py-0.5 rounded-md border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5" @click="runPlagiarism(it, true)" :disabled="running" title="Includes a web search (slower, ~10-20s) — Turnitin-style internet sources scan">
+                  Deep check
+                </button>
+                <button class="text-xs px-2 py-0.5 rounded-md border border-slate-300 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5" @click="openReport(it)" :disabled="!(it.last_report && Object.keys(it.last_report).length)" title="View detailed originality report">
+                  Report
+                </button>
+                <template x-if="it.error"><span class="chip chip-reject" x-text="it.error.slice(0,80)"></span></template>
+              </div>
+              <div class="mt-3 grid grid-cols-2 gap-2">
+                <div>
+                  <label class="label">Paper ID</label>
+                  <input class="input" type="text" :value="it.paper_id" @change="updateItem(it.id, { paper_id: $event.target.value })" :disabled="running" />
+                </div>
+                <div>
+                  <label class="label">Force reject</label>
+                  <select class="input" @change="updateItem(it.id, { force_reject: $event.target.value })" :disabled="running">
+                    <option value="" :selected="it.force_reject===''">— none —</option>
+                    <option value="ai" :selected="it.force_reject==='ai'">AI plagiarism</option>
+                    <option value="plag" :selected="it.force_reject==='plag'">Normal plagiarism</option>
+                    <option value="novelty" :selected="it.force_reject==='novelty'">No novelty</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            <button class="btn-ghost p-1 rounded-md" @click="removeItem(it.id)" :disabled="running" title="Remove">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+
+          <!-- Generated review preview shown on the card itself once done -->
+          <div x-show="it.review && (it.status === 'done' || it.status === 'preview')" class="mt-3 pt-3 border-t border-slate-200 dark:border-white/5 space-y-2" x-transition>
+            <div class="flex items-center gap-2 text-xs">
+              <span class="label !mb-0">Review</span>
+              <span x-show="it.opinion" :class="chipClass(it.opinion)" x-text="it.opinion"></span>
+              <div class="flex-1"></div>
+              <button class="btn-ghost text-xs px-2 py-1 rounded-md inline-flex items-center gap-1" @click="copyItem(it)" title="Copy as Excel row (ID, Title, Review, Opinion — tab-separated)">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                Copy row
+              </button>
+            </div>
+            <div class="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap bg-slate-50 dark:bg-white/[0.02] rounded-lg p-3 font-mono leading-relaxed max-h-40 overflow-y-auto scroll-area" x-text="it.review"></div>
+          </div>
+        </div>
+      </template>
+    </div>
+  </section>
+
+  <!-- Recent results -->
+  <section class="card p-6">
+    <div class="flex items-center justify-between mb-4 flex-wrap gap-3">
+      <h3 class="font-semibold">Recent reviews <span class="text-slate-400 font-normal" x-text="`(${results.length})`"></span></h3>
+      <div class="flex items-center gap-2 flex-wrap">
+        <button class="btn btn-ghost" @click="copyAllRows()" :disabled="!results.length" title="Copy all rows tab-separated — paste straight into Excel">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy all for Excel
+        </button>
+        <button class="btn btn-ghost" @click="loadResults()">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Refresh
+        </button>
+        <button class="btn btn-danger" @click="clearAllResults()" :disabled="!results.length" title="Delete every row from the Excel (keeps header).">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
+          Clear all
+        </button>
+      </div>
+    </div>
+    <div class="overflow-x-auto scroll-area">
+      <table class="w-full text-sm">
+        <thead class="text-left text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200/70 dark:border-white/5">
+          <tr>
+            <th class="px-3 py-2 w-20">ID</th>
+            <th class="px-3 py-2 w-[28ch]">Title</th>
+            <th class="px-3 py-2">Review</th>
+            <th class="px-3 py-2 w-32">Opinion</th>
+            <th class="px-3 py-2 w-28"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="(r, i) in results.slice(0, 200)" :key="r.excel_row || i">
+            <tr class="border-b border-slate-100 dark:border-white/[0.03] item-row align-top">
+              <td class="px-3 py-3 font-mono text-xs" x-text="r.paper_id ?? ''"></td>
+              <td class="px-3 py-3">
+                <div class="truncate max-w-[28ch] font-medium" :title="r.paper_title" x-text="r.paper_title ?? ''"></div>
+                <div class="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[28ch]" x-text="r.primary_name ?? ''"></div>
+              </td>
+              <td class="px-3 py-3 max-w-[60ch]">
+                <div class="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed max-h-32 overflow-y-auto scroll-area font-mono" x-text="r.review || '—'"></div>
+              </td>
+              <td class="px-3 py-3"><span :class="chipClass(r.opinion)" x-text="r.opinion || '—'"></span></td>
+              <td class="px-3 py-3 text-right">
+                <div class="inline-flex items-center gap-1">
+                  <button class="btn-ghost text-xs px-2 py-1 rounded-md inline-flex items-center gap-1" @click="copyRow(r)" title="Copy this row tab-separated">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    Copy
+                  </button>
+                  <button class="text-xs px-2 py-1 rounded-md inline-flex items-center gap-1 text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10" @click="deleteRow(r)" title="Delete this row from the Excel">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </template>
+          <tr x-show="!results.length"><td colspan="5" class="px-3 py-8 text-center text-slate-400 text-sm">No reviews yet. Drop some papers above and click Start review.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-xs text-slate-400 mt-3">
+      Tip: <b>Copy row</b> puts <code>ID&nbsp;⇥&nbsp;Title&nbsp;⇥&nbsp;Author&nbsp;⇥&nbsp;Review&nbsp;⇥&nbsp;Opinion</code> on your clipboard. Click an Excel cell and press <kbd class="px-1.5 py-0.5 rounded border text-[10px] border-slate-300 dark:border-white/10">Ctrl</kbd>+<kbd class="px-1.5 py-0.5 rounded border text-[10px] border-slate-300 dark:border-white/10">V</kbd> — it lands in 5 columns automatically.
+    </p>
+  </section>
+
+  <!-- Originality Report modal -->
+  <template x-if="report && report.data">
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4" x-transition.opacity>
+      <div class="absolute inset-0 bg-slate-950/70 backdrop-blur-md" @click="closeReport()"></div>
+      <div class="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl bg-white dark:bg-ink-900 border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden fade-up">
+        <!-- header -->
+        <div class="px-6 py-4 border-b border-slate-200 dark:border-white/5 flex items-center gap-3">
+          <span class="w-9 h-9 rounded-lg bg-amber-100 dark:bg-amber-500/15 text-amber-600 dark:text-amber-300 grid place-items-center">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </span>
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold truncate" x-text="`Originality Report — ${report.item.filename}`"></div>
+            <div class="text-xs text-slate-500 dark:text-slate-400 truncate" x-text="`Paper ${report.item.paper_id || '(no id)'}`"></div>
+          </div>
+          <button class="btn-ghost p-2 rounded-md" @click="closeReport()">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <!-- body -->
+        <div class="p-6 overflow-y-auto scroll-area space-y-6 flex-1">
+          <!-- Similarity index hero -->
+          <div class="grid sm:grid-cols-4 gap-3">
+            <div class="card p-4">
+              <div class="label">Similarity index</div>
+              <div :class="['text-3xl font-bold', report.data.similarity_index >= 50 ? 'text-rose-500' : report.data.similarity_index >= 30 ? 'text-amber-500' : 'text-emerald-500']"
+                   x-text="`${report.data.similarity_index ?? 0}%`"></div>
+              <div class="text-xs text-slate-400 mt-1">max of corpus &amp; web</div>
+            </div>
+            <div class="card p-4">
+              <div class="label">Corpus match</div>
+              <div :class="['text-2xl font-semibold', (report.data.dup_score||0) >= 50 ? 'text-rose-500' : (report.data.dup_score||0) >= 30 ? 'text-amber-500' : 'text-emerald-500']"
+                   x-text="`${report.data.dup_score ?? 0}%`"></div>
+              <div class="text-xs text-slate-400 mt-1">your stored papers</div>
+            </div>
+            <div class="card p-4">
+              <div class="label">Web match</div>
+              <div :class="['text-2xl font-semibold', (report.data.web_score||0) >= 50 ? 'text-rose-500' : (report.data.web_score||0) >= 30 ? 'text-amber-500' : 'text-emerald-500']"
+                   x-text="report.data.web_score < 0 || report.data.web_score === undefined ? '—' : `${report.data.web_score}%`"></div>
+              <div class="text-xs text-slate-400 mt-1">DuckDuckGo scan</div>
+            </div>
+            <div class="card p-4">
+              <div class="label">AI text</div>
+              <div :class="['text-2xl font-semibold', (report.data.ai_score||0) >= 50 ? 'text-rose-500' : (report.data.ai_score||0) >= 30 ? 'text-amber-500' : 'text-emerald-500']"
+                   x-text="`${report.data.ai_score ?? 0}%`"></div>
+              <div class="text-xs text-slate-400 mt-1">heuristic estimate</div>
+            </div>
+          </div>
+
+          <template x-if="report.data.flagged">
+            <div class="rounded-xl border border-rose-300 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-4 py-3 text-sm">
+              <span class="font-semibold text-rose-700 dark:text-rose-300">FLAGGED — auto-set to Reject:</span>
+              <span class="text-rose-700 dark:text-rose-200" x-text="report.data.flagged_reason"></span>
+            </div>
+          </template>
+
+          <!-- Internal corpus matches -->
+          <section>
+            <h4 class="font-semibold mb-2 flex items-center gap-2">
+              <svg class="w-4 h-4 text-sky-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              Matches in your stored papers
+              <span class="text-xs text-slate-400 font-normal" x-text="`(${(report.data.corpus_matches||[]).length})`"></span>
+            </h4>
+            <template x-if="(report.data.corpus_matches||[]).length">
+              <div class="space-y-2">
+                <template x-for="m in report.data.corpus_matches" :key="m.label">
+                  <div class="rounded-lg border border-slate-200 dark:border-white/5 p-3 bg-slate-50/40 dark:bg-white/[0.02]">
+                    <div class="flex items-center justify-between gap-2 flex-wrap">
+                      <div class="font-medium text-sm" x-text="m.title || m.label || m.paper_id || '(unnamed)'"></div>
+                      <span :class="plagChipClass(m.overlap_pct, 'plag')" x-text="`${m.overlap_pct}% overlap`"></span>
+                    </div>
+                    <template x-if="(m.snippets||[]).length">
+                      <ul class="mt-2 space-y-1 text-xs text-slate-600 dark:text-slate-400">
+                        <template x-for="s in m.snippets" :key="s">
+                          <li class="font-mono italic">"… <span x-text="s"></span> …"</li>
+                        </template>
+                      </ul>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template x-if="!(report.data.corpus_matches||[]).length">
+              <div class="text-sm text-slate-400">No significant overlap with your stored papers.</div>
+            </template>
+          </section>
+
+          <!-- Web matches -->
+          <section x-show="report.data.web_score >= 0">
+            <h4 class="font-semibold mb-2 flex items-center gap-2">
+              <svg class="w-4 h-4 text-violet-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              Matches on the web
+              <span class="text-xs text-slate-400 font-normal" x-text="`(${(report.data.web_matches||[]).length})`"></span>
+            </h4>
+            <template x-if="(report.data.web_matches||[]).length">
+              <div class="space-y-2">
+                <template x-for="m in report.data.web_matches" :key="m.query">
+                  <div class="rounded-lg border border-slate-200 dark:border-white/5 p-3 bg-slate-50/40 dark:bg-white/[0.02]">
+                    <div class="flex items-center justify-between gap-2 flex-wrap">
+                      <div class="text-xs text-slate-500 dark:text-slate-400">Query</div>
+                      <span :class="plagChipClass(m.overlap_pct, 'plag')" x-text="`${m.overlap_pct}% overlap`"></span>
+                    </div>
+                    <div class="text-xs font-mono mt-1" x-text="m.query"></div>
+                    <div class="text-xs text-slate-500 dark:text-slate-400 mt-2">Matched snippet</div>
+                    <div class="text-xs italic mt-1" x-text="m.matched_snippet"></div>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template x-if="!(report.data.web_matches||[]).length">
+              <div class="text-sm text-slate-400">No web matches above the threshold.</div>
+            </template>
+          </section>
+
+          <!-- Raw evidence dump -->
+          <section>
+            <h4 class="font-semibold mb-2">Evidence summary</h4>
+            <ul class="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+              <template x-for="ev in (report.data.ai_evidence||[]).concat(report.data.dup_evidence||[], report.data.web_evidence||[])" :key="ev">
+                <li>• <span x-text="ev"></span></li>
+              </template>
+            </ul>
+          </section>
+        </div>
+
+        <div class="px-6 py-4 border-t border-slate-200 dark:border-white/5 flex justify-end">
+          <button class="btn btn-secondary" @click="closeReport()">Close</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Preview modal -->
+  <template x-if="preview">
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4" x-transition.opacity>
+      <!-- backdrop -->
+      <div class="absolute inset-0 bg-slate-950/70 backdrop-blur-md" @click="previewSkip()"></div>
+
+      <!-- panel -->
+      <div class="relative w-full max-w-3xl max-h-[90vh] flex flex-col
+                  rounded-2xl bg-white dark:bg-ink-900
+                  border border-slate-200 dark:border-white/10
+                  shadow-2xl overflow-hidden fade-up">
+        <div class="px-6 py-4 border-b border-slate-200 dark:border-white/5 flex items-center gap-3 shrink-0">
+          <span class="w-9 h-9 rounded-lg bg-violet-100 dark:bg-violet-500/15 text-violet-600 dark:text-violet-300 grid place-items-center shrink-0">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          </span>
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold truncate" x-text="preview.filename"></div>
+            <div class="text-xs text-slate-500 dark:text-slate-400 truncate" x-text="`Paper ${preview.paper_id || '(no id)'} · ${preview.title || 'no title'}`"></div>
+          </div>
+          <span class="text-xs text-slate-400 shrink-0" x-text="`via ${preview.provider}`"></span>
+        </div>
+
+        <div class="p-6 overflow-y-auto scroll-area space-y-4 flex-1">
+          <div>
+            <label class="label">Review (editable)</label>
+            <textarea class="input min-h-[220px] font-mono text-sm leading-relaxed" x-model="preview.review"></textarea>
+          </div>
+          <div>
+            <label class="label">Opinion</label>
+            <div class="flex flex-wrap gap-2">
+              <template x-for="op in opinions" :key="op">
+                <button type="button"
+                  @click="preview.opinion = op"
+                  :class="[
+                    'px-3 py-1.5 rounded-lg text-sm font-semibold border transition-all',
+                    preview.opinion === op
+                      ? 'bg-brand-gradient text-white border-transparent shadow-glow'
+                      : 'border-slate-300 dark:border-white/10 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5'
+                  ]"
+                  x-text="op"></button>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-6 py-4 border-t border-slate-200 dark:border-white/5 flex items-center gap-3 shrink-0">
+          <button class="btn btn-ghost" @click="previewCancelAll()">Cancel all remaining</button>
+          <div class="flex-1"></div>
+          <button class="btn btn-secondary" @click="previewSkip()">Skip this paper</button>
+          <button class="btn btn-primary" @click="previewAccept()">Accept &amp; save</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function dashboard() {
+  return {
+    items: [],
+    cmtCount: 0,
+    excelPath: {{ default_excel | tojson }},
+    previewEnabled: true,
+    isOver: false,
+    running: false,
+    progressPct: 0,
+    results: [],
+    stats: { total: 0, byOpinion: {} },
+    preview: null,
+    report: null,
+    es: null,
+    excelStatus: { exists: false, size: 0, name: '' },
+    opinions: ['Reject','Springer','Elsevier','IEEE','Adroid','May be springer'],
+
+    init() {
+      this.refreshItems();
+      this.loadResults();
+      this.refreshExcelStatus();
+      this.loadOpinions();
+    },
+
+    async loadOpinions() {
+      try {
+        const r = await fetch('/api/opinions').then(r => r.json());
+        if (r.opinions && r.opinions.length) this.opinions = r.opinions;
+      } catch (e) { /* keep defaults */ }
+    },
+
+    formatSize(bytes) {
+      if (!bytes) return '0 B';
+      const u = ['B','KB','MB','GB']; let i = 0; let v = bytes;
+      while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+      return `${v.toFixed(v < 10 && i ? 1 : 0)} ${u[i]}`;
+    },
+
+    async refreshExcelStatus() {
+      try {
+        const r = await fetch(`/api/excel-status?excel_path=${encodeURIComponent(this.excelPath)}`).then(r=>r.json());
+        this.excelStatus = r;
+      } catch (e) { /* ignore */ }
+    },
+
+    downloadExcel() {
+      if (!this.excelStatus.exists) { toast('Excel file does not exist yet — process at least one paper first.', 'error'); return; }
+      const url = `/api/download?excel_path=${encodeURIComponent(this.excelPath)}`;
+      // Trigger the browser's Save As dialog
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = this.excelStatus.name || 'reviews_output.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      toast('Downloading Excel…', 'success');
+    },
+
+    async openExcelFolder() {
+      try {
+        const r = await fetch('/api/open-folder', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ excel_path: this.excelPath }),
+        });
+        if (!r.ok) { toast((await r.json()).detail || 'Could not open folder', 'error'); return; }
+        toast('Opened in File Explorer', 'success');
+      } catch (e) { toast(e.message, 'error'); }
+    },
+
+    chipClass(op) {
+      const o = (op || '').toLowerCase().trim();
+      if (o === 'reject') return 'chip chip-reject';
+      if (o === 'springer') return 'chip chip-springer';
+      if (o === 'elsevier') return 'chip chip-elsevier';
+      if (o === 'ieee') return 'chip chip-elsevier';
+      if (o === 'acm') return 'chip chip-maybe';
+      if (o === 'adroid') return 'chip chip-adroid';
+      if (o === 'may be springer') return 'chip chip-maybe';
+      return 'chip chip-neutral';
+    },
+
+    barColor(op) {
+      const o = (op || '').toLowerCase().trim();
+      if (o === 'reject') return 'bg-rose-500';
+      if (o === 'springer') return 'bg-emerald-500';
+      if (o === 'elsevier') return 'bg-sky-500';
+      if (o === 'ieee') return 'bg-sky-400';
+      if (o === 'acm') return 'bg-violet-400';
+      if (o === 'adroid') return 'bg-amber-500';
+      if (o === 'may be springer') return 'bg-violet-500';
+      return 'bg-slate-400';
+    },
+
+    sortedOpinions() {
+      return Object.entries(this.stats.byOpinion || {}).sort((a, b) => b[1] - a[1]);
+    },
+
+    async refreshItems() {
+      const r = await fetch('/api/items').then(r => r.json());
+      this.items = r.items;
+      this.cmtCount = r.cmt_count;
+    },
+
+    async onFileInput(ev) { await this.uploadFiles(ev.target.files); ev.target.value=''; },
+    async onDrop(ev) { this.isOver = false; await this.uploadFiles(ev.dataTransfer.files); },
+
+    async uploadFiles(fileList) {
+      if (!fileList || !fileList.length) return;
+      const fd = new FormData();
+      let count = 0;
+      for (const f of fileList) {
+        const ext = (f.name.split('.').pop() || '').toLowerCase();
+        if (ext === 'pdf' || ext === 'docx') { fd.append('files', f); count++; }
+      }
+      if (!count) { toast('Only PDF and DOCX accepted', 'error'); return; }
+      const r = await fetch('/api/upload', { method:'POST', body: fd }).then(r => r.json());
+      toast(`${r.items.length} file(s) added`, 'success');
+      await this.refreshItems();
+    },
+
+    async uploadCmt(ev) {
+      const f = ev.target.files[0]; if (!f) return;
+      const fd = new FormData(); fd.append('file', f);
+      try {
+        const r = await fetch('/api/cmt-upload', { method:'POST', body: fd });
+        if (!r.ok) { toast((await r.json()).detail || 'CMT load failed', 'error'); return; }
+        const d = await r.json();
+        this.cmtCount = d.count;
+        toast(`Loaded ${d.count} papers from CMT`, 'success');
+      } finally { ev.target.value = ''; }
+    },
+
+    async updateItem(id, patch) {
+      await fetch(`/api/items/${id}`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(patch),
+      });
+    },
+    async removeItem(id) {
+      await fetch(`/api/items/${id}`, { method:'DELETE' });
+      this.items = this.items.filter(i => i.id !== id);
+    },
+    async clearAll() {
+      await fetch('/api/items/clear', { method:'POST' });
+      this.items = [];
+    },
+
+    async startJob() {
+      this.running = true;
+      this.progressPct = 0;
+      try {
+        const r = await fetch('/api/job/start', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ excel_path: this.excelPath, preview_enabled: this.previewEnabled }),
+        });
+        if (!r.ok) { this.running = false; toast((await r.json()).detail || 'Start failed', 'error'); return; }
+      } catch (e) { this.running = false; toast(e.message, 'error'); return; }
+      this.openStream();
+    },
+
+    openStream() {
+      if (this.es) this.es.close();
+      this.es = new EventSource('/api/job/stream');
+      this.es.addEventListener('item_update', e => {
+        const d = JSON.parse(e.data);
+        const idx = this.items.findIndex(i => i.id === d.id);
+        if (idx >= 0) this.items[idx] = { ...this.items[idx], ...d };
+      });
+      this.es.addEventListener('progress', e => {
+        const d = JSON.parse(e.data);
+        this.progressPct = (d.current / d.total) * 100;
+      });
+      this.es.addEventListener('preview', e => { this.preview = JSON.parse(e.data); });
+      this.es.addEventListener('job_done', e => {
+        this.running = false;
+        this.progressPct = 100;
+        this.es.close(); this.es = null;
+        this.loadResults();
+        this.refreshExcelStatus();
+        toast('All papers processed. Excel saved.', 'success');
+      });
+      this.es.addEventListener('job_error', e => {
+        const d = JSON.parse(e.data); toast(d.message || 'Job error', 'error');
+      });
+      this.es.onerror = () => { /* let server close it */ };
+    },
+
+    async cancelJob() {
+      await fetch('/api/job/cancel', { method:'POST' });
+      toast('Cancelling…', 'success');
+    },
+
+    async previewAccept() { await this.respondPreview('accept'); },
+    async previewSkip()   { await this.respondPreview('skip'); },
+    async previewCancelAll() { await this.respondPreview('cancel_all'); },
+
+    async respondPreview(action) {
+      const body = { action, review: this.preview?.review ?? '', opinion: this.preview?.opinion ?? '' };
+      this.preview = null;
+      await fetch('/api/job/preview-response', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body),
+      });
+    },
+
+    async loadResults() {
+      const r = await fetch(`/api/results?excel_path=${encodeURIComponent(this.excelPath)}`).then(r=>r.json());
+      this.results = r.rows || [];
+      this.stats = { total: this.results.length, byOpinion: r.stats || {} };
+    },
+
+    // Copy helpers — tab-separated so Excel splits into columns on paste
+    tsv(values) {
+      // Excel-safe: replace tabs/newlines inside fields with spaces, then join
+      return values.map(v => String(v ?? '').replace(/[\t\r\n]+/g, ' ').trim()).join('\t');
+    },
+    async _writeClipboard(text, okMsg) {
+      try {
+        await navigator.clipboard.writeText(text);
+        toast(okMsg, 'success');
+      } catch (e) {
+        // fallback for older browsers
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        document.execCommand('copy');
+        ta.remove();
+        toast(okMsg, 'success');
+      }
+    },
+    copyItem(it) {
+      const txt = this.tsv([it.paper_id, it.filename, '', it.review, it.opinion]);
+      this._writeClipboard(txt, 'Row copied — paste into Excel');
+    },
+    copyRow(r) {
+      const txt = this.tsv([r.paper_id, r.paper_title, r.primary_name, r.review, r.opinion]);
+      this._writeClipboard(txt, 'Row copied — paste into Excel');
+    },
+    copyAllRows() {
+      if (!this.results.length) return;
+      const lines = this.results.map(r => this.tsv([r.paper_id, r.paper_title, r.primary_name, r.review, r.opinion]));
+      this._writeClipboard(lines.join('\n'), `${lines.length} row(s) copied — paste into Excel`);
+    },
+
+    async deleteRow(r) {
+      if (!r.excel_row) { toast('Row index missing — refresh and retry', 'error'); return; }
+      const label = r.paper_id ? `paper ${r.paper_id}` : (r.paper_title || 'this row').slice(0, 40);
+      if (!confirm(`Delete review for ${label}? This permanently removes the row from the Excel.`)) return;
+      const resp = await fetch('/api/results/delete', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ excel_path: this.excelPath, excel_row: r.excel_row }),
+      });
+      if (!resp.ok) { toast((await resp.json()).detail || 'Delete failed', 'error'); return; }
+      toast('Review deleted', 'success');
+      await this.loadResults();
+      await this.refreshExcelStatus();
+    },
+
+    async clearAllResults() {
+      if (!confirm(`Delete ALL ${this.results.length} review row(s) from the Excel? Header is kept. This cannot be undone.`)) return;
+      const resp = await fetch('/api/results/clear', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ excel_path: this.excelPath }),
+      });
+      if (!resp.ok) { toast((await resp.json()).detail || 'Clear failed', 'error'); return; }
+      const d = await resp.json();
+      toast(`Cleared ${d.deleted} row(s)`, 'success');
+      await this.loadResults();
+      await this.refreshExcelStatus();
+    },
+
+    plagChipClass(score, kind) {
+      const s = Number(score) || 0;
+      if (s >= 50) return 'chip chip-reject';
+      if (s >= 30) return 'chip chip-adroid';   // amber warning
+      return 'chip chip-springer';              // green = clean
+    },
+
+    async runPlagiarism(it, deep) {
+      const url = deep ? `/api/plagiarism/${it.id}/deep` : `/api/plagiarism/${it.id}`;
+      if (deep) toast('Deep check running — searching the web (~10-20s)…', 'success');
+      const r = await fetch(url, { method:'POST' });
+      if (!r.ok) { toast('Plagiarism check failed', 'error'); return; }
+      const d = await r.json();
+      const idx = this.items.findIndex(i => i.id === it.id);
+      if (idx >= 0) {
+        this.items[idx].ai_score = d.ai_score;
+        this.items[idx].dup_score = d.dup_score;
+        this.items[idx].web_score = d.web_score;
+        this.items[idx].similarity_index = d.similarity_index;
+        this.items[idx].plag_flagged = d.flagged || '';
+        this.items[idx].plag_evidence = (d.ai_evidence || []).concat(d.dup_evidence || [], d.web_evidence || []);
+        this.items[idx].last_report = d;
+        this.items[idx].force_reject = d.force_reject || this.items[idx].force_reject;
+      }
+      if (d.flagged) {
+        toast(`Flagged: ${d.flagged === 'ai' ? 'AI text' : 'plagiarism'} — paper auto-set to Reject`, 'error');
+      } else {
+        const webPart = deep ? ` · Web ${d.web_score}%` : '';
+        toast(`Clean: AI ${d.ai_score}% · Corpus ${d.dup_score}%${webPart}`, 'success');
+      }
+    },
+
+    openReport(it) { this.report = { item: it, data: it.last_report }; },
+    closeReport() { this.report = null; },
+
+    async clearReviewCache() {
+      if (!confirm('Clear the review cache?\n\nNext time you process the same paper it will hit the LLM fresh instead of using the saved decision. Only do this if you suspect a paper was reviewed incorrectly and you want to retry.')) return;
+      const resp = await fetch('/api/cache/clear', { method:'POST' });
+      const d = await resp.json();
+      toast(`Cache cleared (${d.cleared} entries)`, 'success');
+    },
+  }
+}
+</script>
+{% endblock %}

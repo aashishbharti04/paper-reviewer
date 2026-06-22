@@ -1,0 +1,250 @@
+{% extends "base.html" %}
+{% set active = "check" %}
+{% block title %}AI / Plagiarism Check — Paper Reviewer{% endblock %}
+
+{% block content %}
+<div x-data="checkPage()" class="space-y-8">
+
+  <!-- Hero -->
+  <section class="relative overflow-hidden card p-8">
+    <div class="absolute -top-12 -right-12 w-72 h-72 bg-brand-gradient opacity-20 blur-3xl rounded-full"></div>
+    <div class="relative">
+      <div class="inline-flex items-center gap-2 chip chip-neutral mb-3">
+        <svg class="w-3.5 h-3.5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Standalone integrity check
+      </div>
+      <h1 class="text-3xl font-extrabold tracking-tight">
+        Check <span class="bg-clip-text text-transparent bg-brand-gradient">AI &amp; plagiarism</span> only
+      </h1>
+      <p class="mt-3 text-slate-600 dark:text-slate-400 max-w-2xl">
+        Drop papers here just to test originality. This does <b>not</b> review the paper, call the LLM, or write to Excel —
+        it only reports AI-text and similarity scores. Use the <a href="/" class="text-brand-600 dark:text-brand-300 underline">Dashboard</a> for full reviews.
+      </p>
+    </div>
+  </section>
+
+  <!-- Controls + drop zone -->
+  <section class="space-y-4">
+    <div class="flex items-center gap-3 flex-wrap">
+      <label class="flex items-center gap-2 text-sm cursor-pointer select-none">
+        <input type="checkbox" x-model="deep" class="rounded border-slate-400 text-brand-600 focus:ring-brand-500"/>
+        Deep web check (searches DuckDuckGo — slower, ~10-20s per paper)
+      </label>
+      <div class="flex-1"></div>
+      <button class="btn btn-ghost" @click="clearAll()" :disabled="checking || !results.length">Clear results</button>
+    </div>
+
+    <div
+      class="dropzone p-10 text-center cursor-pointer"
+      :class="{ 'is-over': isOver }"
+      @dragover.prevent="isOver = true"
+      @dragleave.prevent="isOver = false"
+      @drop.prevent="onDrop($event)"
+      @click="$refs.fileInput.click()">
+      <input type="file" class="sr-file" multiple accept=".pdf,.docx" x-ref="fileInput" @change="onFileInput($event)"/>
+      <div class="mx-auto w-16 h-16 grid place-items-center rounded-2xl bg-brand-gradient text-white shadow-glow mb-4">
+        <template x-if="!checking">
+          <svg class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 17.25a6.25 6.25 0 1 1 0-12.5 6.25 6.25 0 0 1 0 12.5zM21 21l-5.2-5.2"/></svg>
+        </template>
+        <template x-if="checking"><span class="spinner !w-6 !h-6 !border-white/40 !border-t-white"></span></template>
+      </div>
+      <h3 class="text-lg font-semibold" x-text="checking ? 'Checking…' : 'Drop PDFs / DOCX to check'"></h3>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">or click to browse · multiple files supported</p>
+    </div>
+  </section>
+
+  <!-- Results -->
+  <section class="space-y-3" x-show="results.length">
+    <h3 class="font-semibold">Results <span class="text-slate-400 font-normal" x-text="`(${results.length})`"></span></h3>
+    <div class="grid lg:grid-cols-2 gap-3">
+      <template x-for="(r, i) in results" :key="i">
+        <div class="card p-4 fade-up">
+          <div class="flex items-start gap-3">
+            <div class="w-10 h-10 rounded-lg grid place-items-center shrink-0"
+                 :class="r.flagged ? 'bg-rose-100 dark:bg-rose-500/15 text-rose-600 dark:text-rose-300' : 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-300'">
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="font-medium truncate" :title="r.filename" x-text="r.filename"></div>
+              <template x-if="r.error">
+                <div class="chip chip-reject mt-2" x-text="r.error"></div>
+              </template>
+              <template x-if="!r.error">
+                <div class="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div class="rounded-lg border border-slate-200 dark:border-white/5 p-2 text-center">
+                    <div class="text-[10px] uppercase tracking-wider text-slate-400">AI</div>
+                    <div :class="scoreColor(r.ai_score)" class="text-lg font-bold" x-text="`${r.ai_score}%`"></div>
+                  </div>
+                  <div class="rounded-lg border border-slate-200 dark:border-white/5 p-2 text-center">
+                    <div class="text-[10px] uppercase tracking-wider text-slate-400">Corpus</div>
+                    <div :class="scoreColor(r.dup_score)" class="text-lg font-bold" x-text="`${r.dup_score}%`"></div>
+                  </div>
+                  <div class="rounded-lg border border-slate-200 dark:border-white/5 p-2 text-center">
+                    <div class="text-[10px] uppercase tracking-wider text-slate-400">Web</div>
+                    <div :class="scoreColor(r.web_score)" class="text-lg font-bold" x-text="r.web_score < 0 ? '—' : `${r.web_score}%`"></div>
+                  </div>
+                  <div class="rounded-lg border border-slate-200 dark:border-white/5 p-2 text-center">
+                    <div class="text-[10px] uppercase tracking-wider text-slate-400">Similarity</div>
+                    <div :class="scoreColor(r.similarity_index)" class="text-lg font-bold" x-text="`${r.similarity_index}%`"></div>
+                  </div>
+                </div>
+              </template>
+              <div class="mt-2 flex items-center gap-2 flex-wrap">
+                <template x-if="r.flagged">
+                  <span class="chip chip-reject" x-text="`FLAGGED: ${r.flagged === 'ai' ? 'AI text' : 'plagiarism'}`"></span>
+                </template>
+                <template x-if="!r.error && !r.flagged">
+                  <span class="chip chip-springer">Clean</span>
+                </template>
+                <button class="text-xs px-2 py-1 rounded-md border border-slate-300 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5"
+                        @click="openReport(r)" x-show="!r.error">View full report</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+  </section>
+
+  <!-- Originality Report modal (shared structure with dashboard) -->
+  <template x-if="report">
+    <div class="fixed inset-0 z-50 flex items-center justify-center p-4" x-transition.opacity>
+      <div class="absolute inset-0 bg-slate-950/70 backdrop-blur-md" @click="report = null"></div>
+      <div class="relative w-full max-w-4xl max-h-[92vh] flex flex-col rounded-2xl bg-white dark:bg-ink-900 border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden fade-up">
+        <div class="px-6 py-4 border-b border-slate-200 dark:border-white/5 flex items-center gap-3">
+          <span class="w-9 h-9 rounded-lg bg-amber-100 dark:bg-amber-500/15 text-amber-600 dark:text-amber-300 grid place-items-center">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </span>
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold truncate" x-text="`Originality Report — ${report.filename}`"></div>
+          </div>
+          <button class="btn-ghost p-2 rounded-md" @click="report = null">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="p-6 overflow-y-auto scroll-area space-y-6 flex-1">
+          <div class="grid sm:grid-cols-4 gap-3">
+            <div class="card p-4"><div class="label">Similarity index</div><div :class="scoreColor(report.similarity_index)" class="text-3xl font-bold" x-text="`${report.similarity_index}%`"></div></div>
+            <div class="card p-4"><div class="label">Corpus</div><div :class="scoreColor(report.dup_score)" class="text-2xl font-semibold" x-text="`${report.dup_score}%`"></div></div>
+            <div class="card p-4"><div class="label">Web</div><div :class="scoreColor(report.web_score)" class="text-2xl font-semibold" x-text="report.web_score < 0 ? '—' : `${report.web_score}%`"></div></div>
+            <div class="card p-4"><div class="label">AI text</div><div :class="scoreColor(report.ai_score)" class="text-2xl font-semibold" x-text="`${report.ai_score}%`"></div></div>
+          </div>
+          <template x-if="report.flagged">
+            <div class="rounded-xl border border-rose-300 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-4 py-3 text-sm">
+              <span class="font-semibold text-rose-700 dark:text-rose-300">FLAGGED:</span>
+              <span class="text-rose-700 dark:text-rose-200" x-text="report.flagged_reason"></span>
+            </div>
+          </template>
+          <section>
+            <h4 class="font-semibold mb-2">Matches in your stored papers <span class="text-xs text-slate-400 font-normal" x-text="`(${(report.corpus_matches||[]).length})`"></span></h4>
+            <template x-if="(report.corpus_matches||[]).length">
+              <div class="space-y-2">
+                <template x-for="m in report.corpus_matches" :key="m.label">
+                  <div class="rounded-lg border border-slate-200 dark:border-white/5 p-3 bg-slate-50/40 dark:bg-white/[0.02]">
+                    <div class="flex items-center justify-between gap-2 flex-wrap">
+                      <div class="font-medium text-sm" x-text="m.title || m.label || m.paper_id || '(unnamed)'"></div>
+                      <span :class="scoreChip(m.overlap_pct)" x-text="`${m.overlap_pct}% overlap`"></span>
+                    </div>
+                    <template x-if="(m.snippets||[]).length">
+                      <ul class="mt-2 space-y-1 text-xs text-slate-600 dark:text-slate-400">
+                        <template x-for="s in m.snippets" :key="s"><li class="font-mono italic">"… <span x-text="s"></span> …"</li></template>
+                      </ul>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template x-if="!(report.corpus_matches||[]).length"><div class="text-sm text-slate-400">No significant overlap with stored papers.</div></template>
+          </section>
+          <section x-show="report.web_score >= 0">
+            <h4 class="font-semibold mb-2">Matches on the web <span class="text-xs text-slate-400 font-normal" x-text="`(${(report.web_matches||[]).length})`"></span></h4>
+            <template x-if="(report.web_matches||[]).length">
+              <div class="space-y-2">
+                <template x-for="m in report.web_matches" :key="m.query">
+                  <div class="rounded-lg border border-slate-200 dark:border-white/5 p-3 bg-slate-50/40 dark:bg-white/[0.02]">
+                    <div class="flex items-center justify-between gap-2"><span class="text-xs text-slate-500">Query</span><span :class="scoreChip(m.overlap_pct)" x-text="`${m.overlap_pct}%`"></span></div>
+                    <div class="text-xs font-mono mt-1" x-text="m.query"></div>
+                    <div class="text-xs italic mt-2" x-text="m.matched_snippet"></div>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template x-if="!(report.web_matches||[]).length"><div class="text-sm text-slate-400">No web matches above the threshold.</div></template>
+          </section>
+          <section>
+            <h4 class="font-semibold mb-2">Evidence summary</h4>
+            <ul class="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+              <template x-for="ev in (report.ai_evidence||[]).concat(report.dup_evidence||[], report.web_evidence||[])" :key="ev">
+                <li>• <span x-text="ev"></span></li>
+              </template>
+            </ul>
+          </section>
+        </div>
+        <div class="px-6 py-4 border-t border-slate-200 dark:border-white/5 flex justify-end">
+          <button class="btn btn-secondary" @click="report = null">Close</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function checkPage() {
+  return {
+    deep: false,
+    isOver: false,
+    checking: false,
+    results: [],
+    report: null,
+
+    scoreColor(s) {
+      const v = Number(s) || 0;
+      if (s < 0) return 'text-slate-400';
+      if (v >= 50) return 'text-rose-500';
+      if (v >= 30) return 'text-amber-500';
+      return 'text-emerald-500';
+    },
+    scoreChip(s) {
+      const v = Number(s) || 0;
+      if (v >= 50) return 'chip chip-reject';
+      if (v >= 30) return 'chip chip-adroid';
+      return 'chip chip-springer';
+    },
+
+    onFileInput(ev) { this.check(ev.target.files); ev.target.value = ''; },
+    onDrop(ev) { this.isOver = false; this.check(ev.dataTransfer.files); },
+
+    async check(fileList) {
+      const fd = new FormData();
+      let n = 0;
+      for (const f of fileList) {
+        const ext = (f.name.split('.').pop() || '').toLowerCase();
+        if (ext === 'pdf' || ext === 'docx') { fd.append('files', f); n++; }
+      }
+      if (!n) { toast('Only PDF and DOCX accepted', 'error'); return; }
+      this.checking = true;
+      if (this.deep) toast('Deep check — searching the web, please wait…', 'success');
+      try {
+        const r = await fetch(`/api/check?deep=${this.deep}`, { method: 'POST', body: fd });
+        if (!r.ok) { toast('Check failed', 'error'); return; }
+        const d = await r.json();
+        // newest first
+        this.results = d.results.concat(this.results);
+        const flagged = d.results.filter(x => x.flagged).length;
+        toast(`Checked ${d.results.length} paper(s)${flagged ? ` · ${flagged} flagged` : ''}`, flagged ? 'error' : 'success');
+      } catch (e) {
+        toast(e.message, 'error');
+      } finally {
+        this.checking = false;
+      }
+    },
+
+    openReport(r) { this.report = r; },
+    clearAll() { this.results = []; },
+  }
+}
+</script>
+{% endblock %}

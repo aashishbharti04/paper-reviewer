@@ -1,0 +1,26 @@
+# Secrets — never commit real provider API keys
+config.json
+
+# Generated review output (may contain submission data)
+reviews_output.xlsx
+
+# Build / packaging artifacts
+build/
+dist/
+Output/
+*.spec.bak
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Editor / OS / tooling
+.claude/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,27 @@
+/* Custom plain CSS — Tailwind utilities live inline in base.html */
+
+/* hide native file input while keeping it functional */
+.sr-file { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+/* small loading spinner */
+.spinner {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(99,102,241,.25);
+  border-top-color: #6366f1;
+  animation: spin .8s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* subtle entrance for newly added cards/rows */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-up { animation: fadeUp .25s ease-out both; }
+
+/* nicer scrollbars inside the result tables */
+.scroll-area::-webkit-scrollbar { width: 10px; height: 10px; }
+.scroll-area::-webkit-scrollbar-thumb { background: rgba(100,116,139,.3); border-radius: 8px; }
+.scroll-area::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,.5); }

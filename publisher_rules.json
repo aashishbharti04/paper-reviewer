@@ -1,0 +1,112 @@
+{
+  "publishers": [
+    {
+      "name": "Springer",
+      "description": "Springer Nature LNCS / Journal — official template",
+      "min_matches": 6,
+      "rules": [
+        "Font: 10-point Times New Roman (or Computer Modern for LaTeX)",
+        "Spacing: 1.5 or double, margins at least 2.5 cm / 1 inch on all sides",
+        "No manual page numbers, running heads, or footers",
+        "Max 3 heading levels using decimal numbering (1, 1.1, 1.1.1)",
+        "Title in concise title case",
+        "Author block: full names, institutional affiliations, emails (ORCID encouraged)",
+        "Abstract: 150-250 words",
+        "Keywords: 4-6 keywords directly beneath the abstract",
+        "Declarations section: Conflict of Interest and Ethical Approval before references",
+        "Data Availability and Author Contributions statements above the references",
+        "Equations created with Word Equation Editor or MathType (NOT pasted as images)",
+        "Tables built as native Word tables (NOT embedded Excel screenshots)",
+        "Figures submitted as high-resolution TIFF / EPS / embedded high-quality PDF, named logically",
+        "In-text citations use name-year format, e.g. (Author, 2024)",
+        "Reference list is alphabetical with full journal names (no abbreviations)"
+      ]
+    },
+    {
+      "name": "Elsevier",
+      "description": "Elsevier journal / ScienceDirect — Your Paper Your Way final format",
+      "min_matches": 5,
+      "rules": [
+        "Single-column layout (not two-column for final production)",
+        "Font: Times New Roman or Arial, 11-12 pt",
+        "Margins: 2.5 cm / 1 inch on all sides",
+        "Double-spaced throughout (including abstract, footnotes, references)",
+        "Continuous line numbering in the left margin from the title page",
+        "Page numbers on every page including references and figures",
+        "Title: concise and informative, avoid abbreviations",
+        "Author block: full names, affiliations, corresponding author email",
+        "Abstract: concise factual summary of 150-250 words",
+        "Keywords: 4-6 keywords/phrases for indexing",
+        "Highlights bullet points (optional but supported)",
+        "Max 3 heading levels using decimal numbering with trailing dot (1., 1.1., 1.1.1.)",
+        "Equations entered as editable text (NOT static images)",
+        "Acronyms defined on first use and used consistently",
+        "Figures NOT embedded in body; placement indicated like [Insert Figure 1 here]",
+        "Figures uploaded as separate high-resolution source files (TIFF or EPS preferred)",
+        "Tables as editable text with NO vertical lines",
+        "Figure and table captions provided as a separate list at the end",
+        "In-text citations use author, year format e.g. (Smith, 2026)"
+      ]
+    },
+    {
+      "name": "IEEE",
+      "description": "IEEE conference / journal — official two-column template",
+      "min_matches": 4,
+      "rules": [
+        "Two-column body layout (inferable from short line lengths)",
+        "Font: Times New Roman 10 pt body on US Letter page size",
+        "Title in large font, author names and affiliations centered below",
+        "Abstract begins with bold/italic 'Abstract—' (em-dash), single paragraph",
+        "Keywords line written as 'Index Terms—' after the abstract",
+        "Section headings use Roman numerals in caps: 'I. INTRODUCTION', 'II. RELATED WORK'",
+        "Subsections lettered: 'A.', 'B.', 'C.'",
+        "In-text citations are bracket-numbered: [1], [2], [3]-[5]",
+        "Reference list in IEEE style: '[1] A. Author, \"Title,\" Journal, vol. x, no. y, pp. z, Year.'",
+        "Figures and tables numbered (Fig. 1, TABLE I) with captions"
+      ]
+    },
+    {
+      "name": "Adroid",
+      "description": "Default conference-proceedings bucket — applied when no Springer / Elsevier template signals are detected",
+      "min_matches": 2,
+      "rules": [
+        "Paper has the minimum required sections (abstract, introduction, methodology, results, conclusion, references)",
+        "Page count is in the 6-20 page range (acceptable for conference proceedings)",
+        "Generic conference paper format, no strong Springer or Elsevier template signals"
+      ]
+    }
+  ],
+  "global": {
+    "reject_if_pages_below": 4,
+    "reject_if_pages_above": 25,
+    "ideal_pages_min": 12,
+    "ideal_pages_max": 14,
+    "acceptable_pages_min": 8,
+    "acceptable_pages_max": 15,
+    "required_sections": [
+      "abstract",
+      "introduction",
+      "methodology",
+      "results",
+      "conclusion",
+      "references"
+    ],
+    "tie_break_order": [
+      "Reject",
+      "Springer",
+      "Elsevier",
+      "May be springer",
+      "IEEE",
+      "Adroid"
+    ],
+    "maybe_springer_when": "Some Springer cues present (2-3 matches) but novelty is weak, lit review too long, or experiments thin",
+    "plagiarism": {
+      "auto_check_before_review": true,
+      "auto_flag_reject_if_over": true,
+      "ai_threshold": 50,
+      "dup_threshold": 50,
+      "gptzero_api_key": "",
+      "copyleaks_api_key": ""
+    }
+  }
+}

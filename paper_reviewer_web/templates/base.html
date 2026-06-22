@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en" x-data="{ dark: localStorage.theme !== 'light' }" :class="{ 'dark': dark }">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>{% block title %}Paper Reviewer{% endblock %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+      colors: {
+        ink:   { 950:'#06070b', 900:'#0b0d14', 850:'#0f1220', 800:'#141828', 700:'#1c2236', 600:'#283051', 500:'#3a4470' },
+        brand: { 50:'#eef2ff',100:'#e0e7ff',200:'#c7d2fe',300:'#a5b4fc',400:'#818cf8',500:'#6366f1',600:'#4f46e5',700:'#4338ca',800:'#3730a3',900:'#312e81' }
+      },
+      boxShadow: {
+        soft: '0 4px 20px -8px rgba(0,0,0,.25), 0 2px 8px -4px rgba(0,0,0,.15)',
+        glow: '0 0 0 1px rgba(99,102,241,.25), 0 20px 60px -20px rgba(99,102,241,.45)',
+      },
+      backgroundImage: {
+        'brand-gradient': 'linear-gradient(135deg,#6366f1 0%,#8b5cf6 45%,#ec4899 100%)',
+        'mesh': 'radial-gradient(at 8% 6%, rgba(99,102,241,.18) 0, transparent 40%), radial-gradient(at 92% 0%, rgba(236,72,153,.14) 0, transparent 45%), radial-gradient(at 60% 100%, rgba(139,92,246,.18) 0, transparent 55%)',
+      }
+    }
+  }
+}
+</script>
+<link rel="stylesheet" href="/static/style.css" />
+<style type="text/tailwindcss">
+  @layer components {
+    .nav-link { @apply px-3 py-1.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors; }
+    .nav-link.is-active { @apply text-brand-700 dark:text-brand-300 bg-brand-50 dark:bg-brand-900/30; }
+
+    .card { @apply rounded-2xl border border-slate-200/70 dark:border-white/5 bg-white/80 dark:bg-ink-900/60 backdrop-blur-xl shadow-soft; }
+
+    .btn { @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed; }
+    .btn-primary { @apply bg-brand-gradient text-white shadow-glow hover:brightness-110 active:brightness-95; }
+    .btn-secondary { @apply bg-slate-100 dark:bg-white/5 text-slate-800 dark:text-slate-100 hover:bg-slate-200 dark:hover:bg-white/10; }
+    .btn-ghost { @apply text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5; }
+    .btn-danger { @apply bg-rose-600 text-white hover:bg-rose-500; }
+
+    .input { @apply w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-white/10 bg-white dark:bg-ink-850 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-500 text-sm; }
+    .label { @apply text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 block; }
+
+    .chip { @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold; }
+    .chip-reject   { @apply bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300; }
+    .chip-springer { @apply bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300; }
+    .chip-elsevier { @apply bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300; }
+    .chip-adroid   { @apply bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300; }
+    .chip-maybe    { @apply bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300; }
+    .chip-neutral  { @apply bg-slate-100 text-slate-600 dark:bg-white/5 dark:text-slate-300; }
+
+    .status-dot { @apply inline-block w-2 h-2 rounded-full; }
+    .dot-pending   { @apply bg-slate-400; }
+    .dot-reading,
+    .dot-reviewing { @apply bg-amber-400 animate-pulse; }
+    .dot-preview   { @apply bg-violet-400 animate-pulse; }
+    .dot-done      { @apply bg-emerald-400; }
+    .dot-skipped   { @apply bg-slate-400; }
+    .dot-error     { @apply bg-rose-500; }
+    .dot-cancelled { @apply bg-slate-500; }
+
+    .dropzone { @apply rounded-2xl border-2 border-dashed border-slate-300 dark:border-white/10 bg-slate-50/50 dark:bg-ink-900/40 transition-all duration-200; }
+    .dropzone.is-over { @apply border-brand-500 bg-brand-50/60 dark:bg-brand-900/15; }
+
+    .toast { @apply px-4 py-3 rounded-xl shadow-soft text-sm font-medium bg-white/95 dark:bg-ink-800/95 text-slate-900 dark:text-slate-100 border border-slate-200 dark:border-white/10 transform translate-y-2 opacity-0 transition-all duration-200; }
+    .toast.show { @apply translate-y-0 opacity-100; }
+    .toast-success { @apply border-emerald-300 dark:border-emerald-500/40; }
+    .toast-error { @apply border-rose-300 dark:border-rose-500/40; }
+
+    .modal-backdrop { @apply fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm; }
+    .modal-panel { @apply fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[min(92vw,860px)] max-h-[90vh] rounded-2xl bg-white dark:bg-ink-900 border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden flex flex-col; }
+
+    .item-row { @apply transition-all duration-200; }
+    .item-row:hover { @apply bg-slate-50 dark:bg-white/[0.02]; }
+  }
+</style>
+</head>
+<body class="font-sans antialiased bg-white text-slate-900 dark:bg-ink-950 dark:text-slate-100 min-h-screen">
+  <div class="fixed inset-0 -z-10 bg-mesh opacity-100 dark:opacity-80 pointer-events-none"></div>
+
+  <nav class="sticky top-0 z-30 backdrop-blur-xl bg-white/70 dark:bg-ink-900/70 border-b border-slate-200/60 dark:border-white/5">
+    <div class="max-w-7xl mx-auto px-6 h-16 flex items-center gap-6">
+      <a href="/" class="flex items-center gap-2 group">
+        <span class="w-9 h-9 rounded-xl bg-brand-gradient grid place-items-center text-white shadow-glow">
+          <svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>
+        </span>
+        <span class="font-bold text-lg tracking-tight">Paper Reviewer</span>
+        <span class="text-xs px-2 py-0.5 rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300 font-medium">ICCCNet</span>
+      </a>
+      <div class="flex-1"></div>
+      <a href="/" class="nav-link {% if active == 'home' %}is-active{% endif %}">Dashboard</a>
+      <a href="/check" class="nav-link {% if active == 'check' %}is-active{% endif %}">AI / Plagiarism Check</a>
+      <a href="/settings" class="nav-link {% if active == 'settings' %}is-active{% endif %}">Settings</a>
+      <button @click="dark = !dark; localStorage.theme = dark ? 'dark' : 'light'"
+              class="w-9 h-9 rounded-lg grid place-items-center hover:bg-slate-100 dark:hover:bg-white/5">
+        <svg x-show="!dark" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg x-show="dark" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-6 py-8">
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Global toast container -->
+  <div id="toast-host" class="fixed bottom-6 right-6 z-50 flex flex-col gap-2 items-end"></div>
+
+  <script src="/static/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

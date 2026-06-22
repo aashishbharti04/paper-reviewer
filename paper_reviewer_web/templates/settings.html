@@ -1,0 +1,515 @@
+{% extends "base.html" %}
+{% set active = "settings" %}
+{% block title %}Settings — Paper Reviewer{% endblock %}
+
+{% block content %}
+<div x-data="settings()" x-init="init()" class="space-y-6">
+
+  <header class="flex items-end justify-between gap-4 flex-wrap">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Provider settings</h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+        Toggle providers on or off. Multiple API keys per provider are rotated automatically;
+        if one hits its quota or fails, the next is tried.
+      </p>
+    </div>
+    <div class="flex items-center gap-3">
+      <label class="flex items-center gap-2 text-sm cursor-pointer select-none">
+        <input type="checkbox" x-model="autoFallback" class="rounded border-slate-400 text-brand-600 focus:ring-brand-500"/>
+        Auto-fallback on failure
+      </label>
+      <button class="btn btn-primary" @click="saveAll()">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Save settings
+      </button>
+    </div>
+  </header>
+
+  <div class="text-xs text-slate-400">
+    Config file: <code class="text-slate-600 dark:text-slate-300" x-text="configPath"></code>
+  </div>
+
+  <!-- Review Rules section -->
+  <section class="card p-6" x-data="reviewRules()" x-init="init()">
+    <div class="flex items-start justify-between gap-4 flex-wrap mb-3">
+      <div>
+        <h2 class="text-xl font-bold tracking-tight">Review rules per publisher</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">
+          Add or delete rules below. If a paper matches at least <b>min matches</b> of a publisher's rules,
+          it is assigned to that publisher. Defaults come from the official Springer Nature and Elsevier
+          author guidelines. Saving will also invalidate the review cache.
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="btn btn-ghost" @click="restoreDefaults()">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          Restore defaults
+        </button>
+        <button class="btn btn-primary" @click="saveRules()">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/></svg>
+          Save rules
+        </button>
+      </div>
+    </div>
+
+    <div class="text-xs text-slate-400 mb-4">
+      Rules file: <code class="text-slate-600 dark:text-slate-300" x-text="rulesPath"></code>
+    </div>
+
+    <!-- Global thresholds -->
+    <div class="mb-6 rounded-xl border border-slate-200 dark:border-white/5 p-4 bg-slate-50/50 dark:bg-white/[0.02]">
+      <h4 class="font-semibold mb-3">Global thresholds</h4>
+      <div class="grid sm:grid-cols-3 gap-3">
+        <div>
+          <label class="label">Reject if pages &lt;</label>
+          <input class="input" type="number" min="1" x-model.number="rules.global.reject_if_pages_below"/>
+        </div>
+        <div>
+          <label class="label">Reject if pages &gt;</label>
+          <input class="input" type="number" min="1" x-model.number="rules.global.reject_if_pages_above"/>
+        </div>
+        <div>
+          <label class="label">Ideal pages min</label>
+          <input class="input" type="number" min="1" x-model.number="rules.global.ideal_pages_min"/>
+        </div>
+        <div>
+          <label class="label">Ideal pages max</label>
+          <input class="input" type="number" min="1" x-model.number="rules.global.ideal_pages_max"/>
+        </div>
+        <div>
+          <label class="label">Acceptable min</label>
+          <input class="input" type="number" min="1" x-model.number="rules.global.acceptable_pages_min"/>
+        </div>
+        <div>
+          <label class="label">Acceptable max</label>
+          <input class="input" type="number" min="1" x-model.number="rules.global.acceptable_pages_max"/>
+        </div>
+      </div>
+      <div class="mt-3">
+        <label class="label">Required sections (a paper missing any of these is auto-rejected)</label>
+        <input class="input font-mono text-xs" type="text"
+               :value="rules.global.required_sections.join(', ')"
+               @change="rules.global.required_sections = $event.target.value.split(',').map(s=>s.trim()).filter(Boolean)"/>
+      </div>
+    </div>
+
+    <!-- Plagiarism settings -->
+    <div class="mb-6 rounded-xl border border-slate-200 dark:border-white/5 p-4 bg-slate-50/50 dark:bg-white/[0.02]" x-data="{ plag: rules.global.plagiarism || {} }">
+      <h4 class="font-semibold mb-1 flex items-center gap-2">
+        <svg class="w-4 h-4 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Plagiarism + AI-text check
+      </h4>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">
+        Runs locally before each review. AI score uses LLM-phrase + sentence-uniformity heuristics; duplicate
+        score compares against the other papers in your queue via 6-word overlap. Score ≥ threshold auto-sets
+        Force Reject so the LLM is skipped and the paper goes straight to "Reject".
+      </p>
+      <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <label class="flex items-center gap-2 text-sm select-none cursor-pointer">
+          <input type="checkbox" class="rounded border-slate-400 text-brand-600 focus:ring-brand-500"
+                 :checked="plag.auto_check_before_review !== false"
+                 @change="rules.global.plagiarism = Object.assign({}, plag, { auto_check_before_review: $event.target.checked }); plag = rules.global.plagiarism">
+          Auto-check before review
+        </label>
+        <label class="flex items-center gap-2 text-sm select-none cursor-pointer">
+          <input type="checkbox" class="rounded border-slate-400 text-brand-600 focus:ring-brand-500"
+                 :checked="plag.auto_flag_reject_if_over !== false"
+                 @change="rules.global.plagiarism = Object.assign({}, plag, { auto_flag_reject_if_over: $event.target.checked }); plag = rules.global.plagiarism">
+          Auto-reject when flagged
+        </label>
+        <div>
+          <label class="label">AI threshold (%)</label>
+          <input class="input" type="number" min="0" max="100"
+                 :value="plag.ai_threshold ?? 50"
+                 @change="rules.global.plagiarism = Object.assign({}, plag, { ai_threshold: Number($event.target.value) }); plag = rules.global.plagiarism"/>
+        </div>
+        <div>
+          <label class="label">Duplicate threshold (%)</label>
+          <input class="input" type="number" min="0" max="100"
+                 :value="plag.dup_threshold ?? 50"
+                 @change="rules.global.plagiarism = Object.assign({}, plag, { dup_threshold: Number($event.target.value) }); plag = rules.global.plagiarism"/>
+        </div>
+      </div>
+
+      <details class="mt-4">
+        <summary class="cursor-pointer text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200">
+          Optional paid API keys
+        </summary>
+        <div class="grid sm:grid-cols-2 gap-3 mt-3">
+          <div>
+            <label class="label flex items-center gap-2">
+              GPTZero API key
+              <span class="chip chip-springer !py-0 !text-[10px]">LIVE</span>
+            </label>
+            <input class="input font-mono text-xs" type="password"
+                   :value="plag.gptzero_api_key ?? ''"
+                   @change="rules.global.plagiarism = Object.assign({}, plag, { gptzero_api_key: $event.target.value }); plag = rules.global.plagiarism"/>
+            <p class="text-xs text-slate-500 mt-1">When set, AI detection uses the real GPTZero API instead of the local heuristic (falls back automatically if the call fails).</p>
+          </div>
+          <div>
+            <label class="label flex items-center gap-2">
+              Copyleaks API key
+              <span class="chip chip-neutral !py-0 !text-[10px]">SERVER-ONLY</span>
+            </label>
+            <input class="input font-mono text-xs" type="password"
+                   :value="plag.copyleaks_api_key ?? ''"
+                   @change="rules.global.plagiarism = Object.assign({}, plag, { copyleaks_api_key: $event.target.value }); plag = rules.global.plagiarism"/>
+            <p class="text-xs text-slate-500 mt-1">Copyleaks full plagiarism scans are webhook-based — they POST results back to a public URL, which a local desktop app can't receive. Use the built-in <b>web + corpus</b> check instead. The key is stored for a future hosted deployment.</p>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Persistent corpus admin -->
+    <div class="mb-6 rounded-xl border border-slate-200 dark:border-white/5 p-4 bg-slate-50/50 dark:bg-white/[0.02]" x-data="corpusAdmin()" x-init="load()">
+      <div class="flex items-start justify-between gap-3 flex-wrap mb-2">
+        <div>
+          <h4 class="font-semibold flex items-center gap-2">
+            <svg class="w-4 h-4 text-sky-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/></svg>
+            Stored paper corpus
+            <span class="chip chip-neutral" x-text="`${entries.length} papers`"></span>
+          </h4>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Every paper that completes a review is added here so future uploads are checked against it (Turnitin-style "student paper repository"). The corpus is stored locally in
+            <code class="text-slate-600 dark:text-slate-300" x-text="dir"></code>.
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button class="btn btn-ghost" @click="load()">Refresh</button>
+          <button class="btn btn-danger" @click="clearAll()" :disabled="!entries.length">Clear corpus</button>
+        </div>
+      </div>
+
+      <div class="rounded-lg border border-slate-200 dark:border-white/5 overflow-hidden mt-3" x-show="entries.length">
+        <table class="w-full text-sm">
+          <thead class="text-left text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-100/60 dark:bg-white/[0.03]">
+            <tr>
+              <th class="px-3 py-2">Paper ID</th>
+              <th class="px-3 py-2">Title</th>
+              <th class="px-3 py-2">Filename</th>
+              <th class="px-3 py-2 text-right">Words</th>
+              <th class="px-3 py-2 w-12"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="e in entries" :key="e.sha">
+              <tr class="border-t border-slate-100 dark:border-white/[0.03]">
+                <td class="px-3 py-2 font-mono text-xs" x-text="e.paper_id || '—'"></td>
+                <td class="px-3 py-2 max-w-[28ch] truncate" :title="e.title" x-text="e.title || '—'"></td>
+                <td class="px-3 py-2 max-w-[20ch] truncate text-xs text-slate-500" :title="e.filename" x-text="e.filename || e.sha.slice(0,12)"></td>
+                <td class="px-3 py-2 text-right font-mono text-xs" x-text="e.word_count"></td>
+                <td class="px-3 py-2 text-right">
+                  <button class="text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10 px-2 py-1 rounded-md" @click="remove(e.sha)" title="Remove from corpus">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <div x-show="!entries.length" class="text-sm text-slate-400 mt-3">Corpus is empty. Process a paper through the review workflow — it gets added here automatically after the review is accepted.</div>
+    </div>
+
+    <!-- Per-publisher rule cards -->
+    <div class="space-y-5">
+      <template x-for="(pub, idx) in rules.publishers" :key="idx">
+        <div class="rounded-xl border border-slate-200 dark:border-white/5 p-5 bg-white/60 dark:bg-ink-900/40">
+          <div class="flex items-start justify-between gap-3 flex-wrap mb-3">
+            <div class="flex items-center gap-3">
+              <span :class="publisherChip(pub.name)" x-text="pub.name"></span>
+              <input class="input !py-1 !w-44 font-semibold" type="text" x-model="pub.name" />
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="text-xs text-slate-500 dark:text-slate-400">Min matches:</label>
+              <input class="input !py-1 !w-20" type="number" min="1" x-model.number="pub.min_matches"/>
+              <button class="btn-ghost text-xs px-2 py-1 rounded-md text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10" @click="removePublisher(idx)" title="Remove this publisher entirely">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
+              </button>
+            </div>
+          </div>
+          <input class="input mb-3" type="text" placeholder="Short description for this publisher" x-model="pub.description"/>
+
+          <ul class="space-y-2">
+            <template x-for="(rule, rIdx) in pub.rules" :key="rIdx">
+              <li class="flex items-start gap-2">
+                <span class="mt-2 w-1.5 h-1.5 rounded-full bg-brand-500 shrink-0"></span>
+                <input class="input flex-1" type="text" x-model="pub.rules[rIdx]"/>
+                <button class="btn-ghost text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-500/10 px-2 py-1.5 rounded-md" @click="removeRule(idx, rIdx)" title="Delete this rule">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </li>
+            </template>
+          </ul>
+
+          <div class="flex items-center gap-2 mt-3">
+            <input class="input flex-1" type="text" placeholder="Add a new rule (e.g. 'Title is in title case')" x-model="newRuleText[idx]" @keydown.enter="addRule(idx)"/>
+            <button class="btn btn-secondary" @click="addRule(idx)">Add rule</button>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <button class="btn btn-secondary mt-4" @click="addPublisher()">
+      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add publisher
+    </button>
+  </section>
+
+  <!-- Provider cards -->
+  <div class="grid lg:grid-cols-1 gap-6">
+
+    <!-- Groq -->
+    <section class="card p-6">
+      <div class="flex items-start justify-between gap-4 flex-wrap">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-xl bg-orange-500/10 text-orange-500 grid place-items-center">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9" opacity=".25"/><path d="M12 3a9 9 0 0 1 9 9h-3a6 6 0 0 0-6-6V3z"/></svg>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold">Groq <span class="text-xs font-normal text-slate-400">free tier</span></h3>
+            <p class="text-xs text-slate-500">console.groq.com → API Keys</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <span :class="testResults.groq?.ok === true ? 'chip chip-springer' : (testResults.groq?.ok === false ? 'chip chip-reject' : 'chip chip-neutral')"
+                x-text="testResults.groq ? (testResults.groq.ok ? 'OK' : 'Fail') : 'untested'"></span>
+          <button class="btn btn-secondary" @click="test('groq')">Test</button>
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" class="sr-only peer" x-model="providers.groq.enabled"/>
+            <div class="w-11 h-6 bg-slate-300 dark:bg-white/10 rounded-full peer-checked:bg-brand-600 transition-all relative after:absolute after:top-0.5 after:left-0.5 after:w-5 after:h-5 after:bg-white after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+          </label>
+        </div>
+      </div>
+      <div class="grid md:grid-cols-3 gap-4 mt-5">
+        <div class="md:col-span-1">
+          <label class="label">Model</label>
+          <input class="input" type="text" x-model="providers.groq.model" placeholder="llama-3.3-70b-versatile"/>
+        </div>
+        <div class="md:col-span-2">
+          <label class="label">API keys (one per line — rotated automatically)</label>
+          <textarea class="input min-h-[110px] font-mono text-xs" x-model="groqKeys" placeholder="gsk_..."></textarea>
+        </div>
+      </div>
+      <div class="text-xs text-slate-400 mt-1" x-show="testResults.groq?.message">
+        <span class="font-semibold">Last test:</span> <span x-text="testResults.groq.message"></span>
+      </div>
+    </section>
+
+    <!-- Ollama -->
+    <section class="card p-6">
+      <div class="flex items-start justify-between gap-4 flex-wrap">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-500 grid place-items-center">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold">Ollama <span class="text-xs font-normal text-slate-400">runs on your PC</span></h3>
+            <p class="text-xs text-slate-500">Install from ollama.com, then run <code>ollama pull llama3.1</code></p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <span :class="testResults.ollama?.ok === true ? 'chip chip-springer' : (testResults.ollama?.ok === false ? 'chip chip-reject' : 'chip chip-neutral')"
+                x-text="testResults.ollama ? (testResults.ollama.ok ? 'OK' : 'Fail') : 'untested'"></span>
+          <button class="btn btn-secondary" @click="test('ollama')">Test</button>
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" class="sr-only peer" x-model="providers.ollama.enabled"/>
+            <div class="w-11 h-6 bg-slate-300 dark:bg-white/10 rounded-full peer-checked:bg-brand-600 transition-all relative after:absolute after:top-0.5 after:left-0.5 after:w-5 after:h-5 after:bg-white after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+          </label>
+        </div>
+      </div>
+      <div class="grid md:grid-cols-2 gap-4 mt-5">
+        <div>
+          <label class="label">Model</label>
+          <input class="input" type="text" x-model="providers.ollama.model" placeholder="llama3.1"/>
+        </div>
+        <div>
+          <label class="label">Base URL</label>
+          <input class="input" type="text" x-model="providers.ollama.base_url" placeholder="http://localhost:11434"/>
+        </div>
+      </div>
+      <div class="text-xs text-slate-400 mt-1" x-show="testResults.ollama?.message">
+        <span class="font-semibold">Last test:</span> <span x-text="testResults.ollama.message"></span>
+      </div>
+    </section>
+
+    <!-- OpenRouter -->
+    <section class="card p-6">
+      <div class="flex items-start justify-between gap-4 flex-wrap">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-xl bg-violet-500/10 text-violet-500 grid place-items-center">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold">OpenRouter <span class="text-xs font-normal text-slate-400">free models available</span></h3>
+            <p class="text-xs text-slate-500">openrouter.ai → Keys</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <span :class="testResults.openrouter?.ok === true ? 'chip chip-springer' : (testResults.openrouter?.ok === false ? 'chip chip-reject' : 'chip chip-neutral')"
+                x-text="testResults.openrouter ? (testResults.openrouter.ok ? 'OK' : 'Fail') : 'untested'"></span>
+          <button class="btn btn-secondary" @click="test('openrouter')">Test</button>
+          <label class="inline-flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" class="sr-only peer" x-model="providers.openrouter.enabled"/>
+            <div class="w-11 h-6 bg-slate-300 dark:bg-white/10 rounded-full peer-checked:bg-brand-600 transition-all relative after:absolute after:top-0.5 after:left-0.5 after:w-5 after:h-5 after:bg-white after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+          </label>
+        </div>
+      </div>
+      <div class="grid md:grid-cols-3 gap-4 mt-5">
+        <div class="md:col-span-1">
+          <label class="label">Model</label>
+          <input class="input" type="text" x-model="providers.openrouter.model" placeholder="meta-llama/llama-3.1-70b-instruct:free"/>
+        </div>
+        <div class="md:col-span-2">
+          <label class="label">API keys (one per line)</label>
+          <textarea class="input min-h-[110px] font-mono text-xs" x-model="openrouterKeys" placeholder="sk-or-..."></textarea>
+        </div>
+      </div>
+      <div class="text-xs text-slate-400 mt-1" x-show="testResults.openrouter?.message">
+        <span class="font-semibold">Last test:</span> <span x-text="testResults.openrouter.message"></span>
+      </div>
+    </section>
+
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function corpusAdmin() {
+  return {
+    entries: [],
+    dir: '',
+    async load() {
+      const r = await fetch('/api/corpus').then(r => r.json());
+      this.entries = r.entries || [];
+      this.dir = r.dir || '';
+    },
+    async remove(sha) {
+      if (!confirm('Remove this paper from the corpus? Future uploads will no longer be compared against it.')) return;
+      await fetch(`/api/corpus/${sha}`, { method: 'DELETE' });
+      await this.load();
+    },
+    async clearAll() {
+      if (!confirm(`Permanently delete ALL ${this.entries.length} paper(s) from the corpus? This cannot be undone.`)) return;
+      const r = await fetch('/api/corpus/clear', { method: 'POST' }).then(r => r.json());
+      toast(`Removed ${r.cleared} papers from corpus`, 'success');
+      await this.load();
+    },
+  }
+}
+
+function reviewRules() {
+  return {
+    rules: { publishers: [], global: { required_sections: [] } },
+    rulesPath: '',
+    newRuleText: [],
+
+    async init() {
+      const r = await fetch('/api/publisher-rules').then(r => r.json());
+      this.rules = r.rules;
+      this.rulesPath = r.rules_path;
+      this.newRuleText = this.rules.publishers.map(() => '');
+    },
+
+    publisherChip(name) {
+      const n = (name || '').toLowerCase().trim();
+      if (n === 'reject') return 'chip chip-reject';
+      if (n === 'springer') return 'chip chip-springer';
+      if (n === 'elsevier') return 'chip chip-elsevier';
+      if (n === 'adroid') return 'chip chip-adroid';
+      if (n === 'may be springer') return 'chip chip-maybe';
+      return 'chip chip-neutral';
+    },
+
+    addRule(pubIdx) {
+      const txt = (this.newRuleText[pubIdx] || '').trim();
+      if (!txt) return;
+      this.rules.publishers[pubIdx].rules.push(txt);
+      this.newRuleText[pubIdx] = '';
+    },
+    removeRule(pubIdx, rIdx) {
+      this.rules.publishers[pubIdx].rules.splice(rIdx, 1);
+    },
+    addPublisher() {
+      this.rules.publishers.push({
+        name: 'New publisher',
+        description: '',
+        min_matches: 3,
+        rules: [],
+      });
+      this.newRuleText.push('');
+    },
+    removePublisher(idx) {
+      if (!confirm(`Remove publisher "${this.rules.publishers[idx].name}" entirely?`)) return;
+      this.rules.publishers.splice(idx, 1);
+      this.newRuleText.splice(idx, 1);
+    },
+
+    async saveRules() {
+      const r = await fetch('/api/publisher-rules', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ rules: this.rules })
+      });
+      if (r.ok) {
+        toast('Review rules saved — review cache cleared', 'success');
+      } else {
+        const d = await r.json().catch(()=>({detail:'unknown'}));
+        toast('Save failed: ' + (d.detail || 'unknown'), 'error');
+      }
+    },
+
+    async restoreDefaults() {
+      if (!confirm('Reset all publisher rules to the official defaults from Springer Nature + Elsevier guidelines? Your edits will be lost.')) return;
+      const r = await fetch('/api/publisher-rules/restore-defaults', { method: 'POST' }).then(r=>r.json());
+      this.rules = r.rules;
+      this.newRuleText = this.rules.publishers.map(() => '');
+      toast('Defaults restored', 'success');
+    },
+  }
+}
+
+function settings() {
+  return {
+    providers: {{ providers | tojson }},
+    autoFallback: {{ 'true' if auto_fallback else 'false' }},
+    configPath: {{ config_path | tojson }},
+    groqKeys: "",
+    openrouterKeys: "",
+    testResults: {},
+
+    init() {
+      this.groqKeys = (this.providers.groq?.api_keys || []).join('\n');
+      this.openrouterKeys = (this.providers.openrouter?.api_keys || []).join('\n');
+    },
+
+    serialize() {
+      const out = JSON.parse(JSON.stringify(this.providers));
+      out.groq.api_keys = this.groqKeys.split('\n').map(s => s.trim()).filter(Boolean);
+      out.openrouter.api_keys = this.openrouterKeys.split('\n').map(s => s.trim()).filter(Boolean);
+      return out;
+    },
+
+    async saveAll() {
+      const r = await fetch('/api/providers', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ providers: this.serialize(), auto_fallback: this.autoFallback })
+      });
+      if (r.ok) toast('Settings saved', 'success');
+      else toast('Save failed', 'error');
+    },
+
+    async test(name) {
+      // save first so the test reflects the current edits
+      await this.saveAll();
+      this.testResults[name] = { ok: null, message: 'Testing…' };
+      const r = await fetch(`/api/providers/${name}/test`, { method:'POST' });
+      const d = await r.json();
+      this.testResults[name] = d;
+      toast(d.ok ? `${name}: OK` : `${name}: ${d.message?.slice(0,80)}`, d.ok ? 'success' : 'error');
+    }
+  }
+}
+</script>
+{% endblock %}
