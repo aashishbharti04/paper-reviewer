@@ -4,7 +4,7 @@ from PyInstaller.utils.hooks import collect_all
 
 datas = [('paper_reviewer_web/templates', 'paper_reviewer_web/templates'), ('paper_reviewer_web/static', 'paper_reviewer_web/static')]
 binaries = []
-hiddenimports = ['uvicorn.loops.auto', 'uvicorn.protocols.http.auto', 'uvicorn.protocols.websockets.auto', 'uvicorn.lifespan.on']
+hiddenimports = ['paper_reviewer_web.app', 'paper_reviewer_web.tasks', 'uvicorn.logging', 'uvicorn.loops.auto', 'uvicorn.protocols.http.auto', 'uvicorn.protocols.websockets.auto', 'uvicorn.lifespan.on']
 hiddenimports += collect_submodules('paper_reviewer')
 hiddenimports += collect_submodules('paper_reviewer_web')
 hiddenimports += collect_submodules('openpyxl')
