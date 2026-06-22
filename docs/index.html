@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Paper Reviewer — ICCCNet2026</title>
+<meta name="description" content="Desktop / web tool for conference paper screening: PDF/DOCX ingest, publisher-bucket rules, AI-text + plagiarism checks, CMT-style Excel export." />
+<style>
+  :root{
+    --bg:#0b1020; --panel:#141a30; --panel2:#1b2240; --line:#2a3358;
+    --text:#e8ecf7; --muted:#9aa6c8; --brand:#5b8cff; --brand2:#7af0c8; --accent:#ffd166;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+       background:radial-gradient(1200px 600px at 70% -10%,#1a2547 0%,transparent 60%),var(--bg);
+       color:var(--text);line-height:1.6}
+  a{color:var(--brand)}
+  .wrap{max-width:980px;margin:0 auto;padding:0 22px}
+  header{padding:18px 0;display:flex;align-items:center;justify-content:space-between;gap:16px}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:700;letter-spacing:.2px}
+  .logo .mark{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--brand),var(--brand2));
+              display:grid;place-items:center;color:#06122b;font-weight:900}
+  nav a{color:var(--muted);text-decoration:none;margin-left:18px;font-size:14px}
+  nav a:hover{color:var(--text)}
+  .hero{padding:64px 0 40px;text-align:center}
+  .badge{display:inline-block;font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+         color:var(--brand2);border:1px solid var(--line);border-radius:999px;padding:6px 14px;margin-bottom:22px}
+  h1{font-size:clamp(34px,6vw,56px);line-height:1.08;margin:.2em 0 .35em;
+     background:linear-gradient(180deg,#fff,#bcd0ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .lead{font-size:clamp(16px,2.4vw,20px);color:var(--muted);max-width:680px;margin:0 auto 30px}
+  .cta{display:flex;gap:14px;justify-content:center;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:9px;padding:14px 22px;border-radius:12px;
+       font-weight:700;text-decoration:none;border:1px solid transparent;transition:.15s}
+  .btn-primary{background:linear-gradient(135deg,var(--brand),#3f6fe0);color:#fff;box-shadow:0 8px 30px rgba(91,140,255,.35)}
+  .btn-primary:hover{transform:translateY(-2px)}
+  .btn-ghost{background:var(--panel);border-color:var(--line);color:var(--text)}
+  .btn-ghost:hover{border-color:var(--brand)}
+  .meta{margin-top:14px;color:var(--muted);font-size:13px}
+  section{padding:42px 0}
+  h2{font-size:26px;margin:0 0 22px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);
+        border-radius:16px;padding:20px}
+  .card .ic{font-size:22px;margin-bottom:10px}
+  .card h3{margin:0 0 6px;font-size:16px}
+  .card p{margin:0;color:var(--muted);font-size:14px}
+  .steps{counter-reset:s;display:grid;gap:14px}
+  .step{display:flex;gap:14px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);
+        border-radius:14px;padding:16px 18px}
+  .step .n{counter-increment:s;min-width:30px;height:30px;border-radius:8px;background:var(--brand);
+           color:#06122b;font-weight:800;display:grid;place-items:center}
+  .step .n::before{content:counter(s)}
+  code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  pre{background:#0a0f22;border:1px solid var(--line);border-radius:12px;padding:14px 16px;overflow:auto;font-size:13.5px;color:#cfe0ff}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600}
+  .note{background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.3);border-radius:14px;
+        padding:16px 18px;color:#f4e6bf;font-size:14px}
+  footer{padding:36px 0 60px;color:var(--muted);font-size:13px;text-align:center;border-top:1px solid var(--line);margin-top:30px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo"><span class="mark">PR</span> Paper Reviewer</div>
+    <nav>
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/aashishbharti04/paper-reviewer">GitHub</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <span class="badge">ICCCNet2026 · Conference Screening</span>
+    <h1>Screen conference papers in minutes.</h1>
+    <p class="lead">Drop in a PDF or DOCX and get an automatic publisher bucket, AI-text &amp;
+       plagiarism checks, a generated review, and a CMT-style Excel row — from a clean web dashboard or a native desktop app.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/aashishbharti04/paper-reviewer/releases/latest/download/PaperReviewer-Setup.exe">⬇ Download for Windows</a>
+      <a class="btn btn-ghost" href="https://github.com/aashishbharti04/paper-reviewer">★ View on GitHub</a>
+    </div>
+    <div class="meta">v1.0.0 · Windows installer (49 MB) · no Python required</div>
+  </div>
+
+  <section id="features">
+    <h2>What it does</h2>
+    <div class="grid">
+      <div class="card"><div class="ic">📄</div><h3>PDF &amp; DOCX ingest</h3><p>Pulls text and metadata straight from the submitted manuscript.</p></div>
+      <div class="card"><div class="ic">🗂️</div><h3>Publisher rules engine</h3><p>Assigns each paper to the right publisher bucket using editable rules.</p></div>
+      <div class="card"><div class="ic">🤖</div><h3>AI-text detection</h3><p>Flags machine-generated writing before it reaches reviewers.</p></div>
+      <div class="card"><div class="ic">🔍</div><h3>Plagiarism check</h3><p>Compares against a local corpus and optional deep web check.</p></div>
+      <div class="card"><div class="ic">📊</div><h3>CMT-style Excel export</h3><p>Appends results to a Microsoft CMT–schema sheet, columns preserved.</p></div>
+      <div class="card"><div class="ic">🖥️</div><h3>Web + desktop</h3><p>FastAPI dashboard, native Edge app window, or legacy Tkinter UI.</p></div>
+    </div>
+  </section>
+
+  <section id="install">
+    <h2>Get started</h2>
+    <div class="steps">
+      <div class="step"><span class="n"></span><div><strong>Install</strong> — download <code>PaperReviewer-Setup.exe</code> and run it. No Python needed.</div></div>
+      <div class="step"><span class="n"></span><div><strong>Add a free LLM key</strong> — open the <em>Settings</em> tab and paste a Groq, OpenRouter, or local Ollama key.</div></div>
+      <div class="step"><span class="n"></span><div><strong>Review</strong> — upload a paper, let it score and bucket, then export to Excel.</div></div>
+    </div>
+
+    <h2 style="margin-top:34px">Run from source</h2>
+    <pre>pip install -r requirements.txt
+copy config.json.example config.json   # add your provider key
+python -m paper_reviewer_web.app        # open http://localhost:8765</pre>
+
+    <h2 style="margin-top:34px">Free LLM providers</h2>
+    <table>
+      <tr><th>Provider</th><th>Get a free key</th></tr>
+      <tr><td>Groq</td><td><a href="https://console.groq.com">console.groq.com</a></td></tr>
+      <tr><td>OpenRouter</td><td><a href="https://openrouter.ai">openrouter.ai</a></td></tr>
+      <tr><td>Ollama (local)</td><td><a href="https://ollama.com">ollama.com</a> · <code>ollama pull llama3.1</code></td></tr>
+    </table>
+
+    <p class="note" style="margin-top:26px">⚠️ This tool runs locally and has no login. It’s built for a single reviewer on a trusted machine — not for public multi-user hosting.</p>
+  </section>
+
+  <footer>
+    Paper Reviewer · MIT License ·
+    <a href="https://github.com/aashishbharti04/paper-reviewer">github.com/aashishbharti04/paper-reviewer</a>
+  </footer>
+</div>
+</body>
+</html>
