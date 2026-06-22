@@ -62,6 +62,37 @@ templates = Jinja2Templates(env=_jinja_env)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+def _default_excel_path() -> str:
+    """Default location of the master reviews Excel.
+
+    For the installed (frozen) app, Path.cwd() is the install folder under
+    AppData\\Local\\Programs — a poor place for user data (it can be wiped on
+    uninstall/reinstall). Use a stable, discoverable folder in the user's
+    Documents instead, migrating any pre-existing reviews_output.xlsx from the
+    old install/cwd location once so prior reviews are not lost.
+    """
+    if getattr(sys, "frozen", False):
+        target_dir = Path.home() / "Documents" / "PaperReviewer"
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            return str(Path.cwd() / "reviews_output.xlsx")
+        target = target_dir / "reviews_output.xlsx"
+        if not target.exists():
+            for legacy in (
+                Path(sys.executable).resolve().parent / "reviews_output.xlsx",
+                Path.cwd() / "reviews_output.xlsx",
+            ):
+                try:
+                    if legacy.exists() and legacy.resolve() != target.resolve():
+                        shutil.copy2(legacy, target)
+                        break
+                except Exception:
+                    pass
+        return str(target)
+    return str(Path.cwd() / "reviews_output.xlsx")
+
+
 # ---------------- Pages ----------------
 
 
@@ -69,7 +100,7 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 def index(request: Request):
     return templates.TemplateResponse(
         request, "index.html",
-        {"default_excel": str(Path.cwd() / "reviews_output.xlsx")},
+        {"default_excel": _default_excel_path()},
     )
 
 
@@ -190,7 +221,7 @@ async def list_items():
 @app.post("/api/job/start")
 async def start_job(request: Request):
     body = await request.json()
-    STATE.excel_path = body.get("excel_path") or str(Path.cwd() / "reviews_output.xlsx")
+    STATE.excel_path = body.get("excel_path") or _default_excel_path()
     STATE.preview_enabled = bool(body.get("preview_enabled", True))
     if STATE.running:
         raise HTTPException(409, "A job is already running")
@@ -442,7 +473,7 @@ def _run_plagiarism_for_item(item: PaperItem, *, deep: bool = False) -> plagiari
 
 @app.get("/api/results")
 async def results(excel_path: Optional[str] = None):
-    path = excel_path or STATE.excel_path or str(Path.cwd() / "reviews_output.xlsx")
+    path = excel_path or STATE.excel_path or _default_excel_path()
     p = Path(path)
     if not p.exists():
         return {"rows": [], "stats": {}, "excel_path": str(p)}
@@ -477,7 +508,7 @@ async def results(excel_path: Optional[str] = None):
 @app.post("/api/results/delete")
 async def delete_result(request: Request):
     body = await request.json()
-    path = body.get("excel_path") or STATE.excel_path or str(Path.cwd() / "reviews_output.xlsx")
+    path = body.get("excel_path") or STATE.excel_path or _default_excel_path()
     row_index = body.get("excel_row")
     if not row_index:
         raise HTTPException(400, "excel_row is required")
@@ -491,7 +522,7 @@ async def delete_result(request: Request):
 @app.post("/api/results/clear")
 async def clear_results(request: Request):
     body = await request.json()
-    path = body.get("excel_path") or STATE.excel_path or str(Path.cwd() / "reviews_output.xlsx")
+    path = body.get("excel_path") or STATE.excel_path or _default_excel_path()
     try:
         n = excel_io.clear_all_rows(path)
     except Exception as e:
@@ -656,7 +687,7 @@ async def restore_publisher_defaults():
 
 @app.get("/api/excel-status")
 async def excel_status(excel_path: Optional[str] = None):
-    path = excel_path or STATE.excel_path or str(Path.cwd() / "reviews_output.xlsx")
+    path = excel_path or STATE.excel_path or _default_excel_path()
     p = Path(path)
     return {
         "exists": p.exists(),
@@ -669,7 +700,7 @@ async def excel_status(excel_path: Optional[str] = None):
 
 @app.get("/api/download")
 async def download_excel(excel_path: Optional[str] = None):
-    path = excel_path or STATE.excel_path or str(Path.cwd() / "reviews_output.xlsx")
+    path = excel_path or STATE.excel_path or _default_excel_path()
     p = Path(path)
     if not p.exists():
         raise HTTPException(404, f"Excel file not found at {p}. Process at least one paper first.")
@@ -683,7 +714,7 @@ async def download_excel(excel_path: Optional[str] = None):
 @app.post("/api/open-folder")
 async def open_folder(request: Request):
     body = await request.json()
-    path = body.get("excel_path") or STATE.excel_path or str(Path.cwd() / "reviews_output.xlsx")
+    path = body.get("excel_path") or STATE.excel_path or _default_excel_path()
     p = Path(path)
     target = p if p.exists() else p.parent
     if not target.exists():

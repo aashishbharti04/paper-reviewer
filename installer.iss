@@ -11,7 +11,7 @@
 ;   4. The installer is written to Output\PaperReviewer-Setup.exe
 
 #define MyAppName        "Paper Reviewer"
-#define MyAppVersion     "1.0.2"
+#define MyAppVersion     "1.0.3"
 #define MyAppPublisher   "Asur"
 #define MyAppExeName     "PaperReviewer.exe"
 #define MyAppSourceDir   "dist\PaperReviewer"
