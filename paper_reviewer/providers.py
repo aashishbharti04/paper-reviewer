@@ -52,7 +52,7 @@ class Provider:
     enabled: bool = False
     model: str = ""
 
-    def call(self, system: str, user: str, *, timeout: int = 60) -> str:
+    def call(self, system: str, user: str, *, timeout: int = 60, json_mode: bool = False) -> str:
         raise NotImplementedError
 
     def test(self) -> tuple[bool, str]:
@@ -81,29 +81,32 @@ class GroqProvider(Provider):
             self._key_cycle = itertools.cycle(self.api_keys)
         return next(self._key_cycle)
 
-    def call(self, system: str, user: str, *, timeout: int = 60) -> str:
+    def call(self, system: str, user: str, *, timeout: int = 60, json_mode: bool = False) -> str:
+        url = "https://api.groq.com/openai/v1/chat/completions"
         last_err = None
         for _ in range(max(1, len(self.api_keys))):
             key = self._next_key()
+            headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                "temperature": 0.0,
+                "seed": 42,
+                "max_tokens": 1800,
+            }
+            # Force the API to return a valid JSON object so review parsing can't fail
+            # on chatty models that ignore the "strict JSON" instruction.
+            if json_mode:
+                payload["response_format"] = {"type": "json_object"}
             try:
-                r = requests.post(
-                    "https://api.groq.com/openai/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": self.model,
-                        "messages": [
-                            {"role": "system", "content": system},
-                            {"role": "user", "content": user},
-                        ],
-                        "temperature": 0.0,
-                        "seed": 42,
-                        "max_tokens": 1800,
-                    },
-                    timeout=timeout,
-                )
+                r = requests.post(url, headers=headers, json=payload, timeout=timeout)
+                # Some models/endpoints reject response_format with 400 — retry once plainly.
+                if r.status_code == 400 and json_mode:
+                    payload.pop("response_format", None)
+                    r = requests.post(url, headers=headers, json=payload, timeout=timeout)
                 if r.status_code in (401, 403, 429):
                     last_err = f"Groq key error {r.status_code}: {r.text[:200]}"
                     continue
@@ -125,19 +128,22 @@ class OllamaProvider(Provider):
     base_url: str = "http://localhost:11434"
     model: str = "llama3.1"
 
-    def call(self, system: str, user: str, *, timeout: int = 180) -> str:
+    def call(self, system: str, user: str, *, timeout: int = 180, json_mode: bool = False) -> str:
         try:
+            body = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                "stream": False,
+                "options": {"temperature": 0.0, "seed": 42},
+            }
+            if json_mode:
+                body["format"] = "json"
             r = requests.post(
                 f"{self.base_url.rstrip('/')}/api/chat",
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": system},
-                        {"role": "user", "content": user},
-                    ],
-                    "stream": False,
-                    "options": {"temperature": 0.0, "seed": 42},
-                },
+                json=body,
                 timeout=timeout,
             )
             r.raise_for_status()
@@ -164,31 +170,34 @@ class OpenRouterProvider(Provider):
             self._key_cycle = itertools.cycle(self.api_keys)
         return next(self._key_cycle)
 
-    def call(self, system: str, user: str, *, timeout: int = 90) -> str:
+    def call(self, system: str, user: str, *, timeout: int = 90, json_mode: bool = False) -> str:
+        url = "https://openrouter.ai/api/v1/chat/completions"
         last_err = None
         for _ in range(max(1, len(self.api_keys))):
             key = self._next_key()
+            headers = {
+                "Authorization": f"Bearer {key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://localhost/paper-reviewer",
+                "X-Title": "Paper Reviewer",
+            }
+            payload = {
+                "model": self.model,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user},
+                ],
+                "temperature": 0.0,
+                "seed": 42,
+                "max_tokens": 1800,
+            }
+            if json_mode:
+                payload["response_format"] = {"type": "json_object"}
             try:
-                r = requests.post(
-                    "https://openrouter.ai/api/v1/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {key}",
-                        "Content-Type": "application/json",
-                        "HTTP-Referer": "https://localhost/paper-reviewer",
-                        "X-Title": "Paper Reviewer",
-                    },
-                    json={
-                        "model": self.model,
-                        "messages": [
-                            {"role": "system", "content": system},
-                            {"role": "user", "content": user},
-                        ],
-                        "temperature": 0.0,
-                        "seed": 42,
-                        "max_tokens": 1800,
-                    },
-                    timeout=timeout,
-                )
+                r = requests.post(url, headers=headers, json=payload, timeout=timeout)
+                if r.status_code == 400 and json_mode:
+                    payload.pop("response_format", None)
+                    r = requests.post(url, headers=headers, json=payload, timeout=timeout)
                 if r.status_code in (401, 403, 429):
                     last_err = f"OpenRouter key error {r.status_code}: {r.text[:200]}"
                     continue
@@ -216,7 +225,7 @@ class ProviderManager:
     order: list[str] = field(default_factory=lambda: ["groq", "ollama", "openrouter"])
     auto_fallback: bool = True
 
-    def call(self, system: str, user: str) -> tuple[str, str]:
+    def call(self, system: str, user: str, *, json_mode: bool = False) -> tuple[str, str]:
         """Try providers in order. Returns (provider_name, response_text)."""
         errors = []
         for name in self.order:
@@ -224,7 +233,7 @@ class ProviderManager:
             if p is None or not p.enabled:
                 continue
             try:
-                out = p.call(system, user)
+                out = p.call(system, user, json_mode=json_mode)
                 return name, out
             except Exception as e:
                 errors.append(f"{name}: {e}")

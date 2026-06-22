@@ -205,8 +205,12 @@ def _parse_loose(text: str) -> tuple[str, str]:
     if m:
         opinion = m.group(1).strip()
     if not opinion:
-        # 2. Scan for any known opinion keyword, preferring the last occurrence
-        candidates = ["May be springer", "Reject", "Springer", "Elsevier", "IEEE", "ACM", "Adroid"]
+        # 2. Scan for any known opinion keyword, preferring the last occurrence.
+        #    Use the live configured opinions so a new publisher is matched too.
+        try:
+            candidates = list(dict.fromkeys(allowed_opinions() + ["Springer", "IEEE", "ACM", "Adroid"]))
+        except Exception:
+            candidates = ["May be springer", "Reject", "Springer", "Elsevier", "IEEE", "ACM", "Adroid"]
         last_pos, last_op = -1, ""
         low = text.lower()
         for c in candidates:
@@ -277,7 +281,7 @@ def review_paper(
 
     user_prompt = build_user_prompt(paper_text, title_hint, page_count=page_count, sections=sections)
     # Rebuild the system prompt each call so live rule edits take effect immediately.
-    provider_name, raw = manager.call(build_system_prompt(), user_prompt)
+    provider_name, raw = manager.call(build_system_prompt(), user_prompt, json_mode=True)
     review, opinion = _parse_json(raw)
     opinion = _normalize_opinion(opinion)
     review = review.strip()
